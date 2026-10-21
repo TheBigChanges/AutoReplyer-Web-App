@@ -20,9 +20,13 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.auth import validate_init_data
+from server.i18n import translate
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 app = FastAPI(title='AutoReplyer Web App API', docs_url=None, redoc_url=None)
@@ -30,7 +34,19 @@ origins = [v.strip() for v in os.getenv('WEBAPP_ORIGINS', '').split(',') if v.st
 if origins:
     if '*' in origins:
         raise RuntimeError('WEBAPP_ORIGINS requires explicit HTTPS origins, not *.')
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST', 'PATCH', 'DELETE'], allow_headers=['Content-Type', 'X-Telegram-Init-Data'])
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST', 'PATCH', 'DELETE'], allow_headers=['Content-Type', 'X-Telegram-Init-Data', 'Accept-Language'])
+
+
+@app.exception_handler(StarletteHTTPException)
+async def localized_http_error(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(status_code=exc.status_code, headers=exc.headers,
+                        content={'detail': translate(str(exc.detail), request.headers.get('accept-language'))})
+
+
+@app.exception_handler(RequestValidationError)
+async def localized_validation_error(request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=422, content={
+        'detail': translate('Maydonlarni tekshiring.', request.headers.get('accept-language'))})
 
 _modules = None
 _module_lock = threading.Lock()
@@ -187,7 +203,10 @@ def bootstrap(user: User):
     if connection and not isinstance(connection, dict):
         raise HTTPException(503, 'AutoReplyer kodi versiyasi mos emas.')
     zone = ZoneInfo(settings.get('name_clock_tz') or 'Asia/Tashkent')
-    return {'user': {'id': uid, 'first_name': user.get('first_name', 'Foydalanuvchi')}, 'plan': plan(uid), 'connection': {k: connection.get(k) for k in ['is_enabled', 'can_reply']} if connection else None, 'settings': settings, 'faq': db.list_faq_entries(uid), 'knowledge': db.list_kb_entries(uid), 'schedules': db.list_schedule_rules(uid), 'ai_usage': db.get_ai_usage(uid, datetime.now(zone).date().isoformat())}
+    bot_language = db.get_user_lang(uid)
+    return {'user': {'id': uid, 'first_name': user.get('first_name', 'Foydalanuvchi')},
+            'language': bot_language if bot_language in ('uz', 'ru', 'en') else user.get('language_code', 'uz'),
+            'plan': plan(uid), 'connection': {k: connection.get(k) for k in ['is_enabled', 'can_reply']} if connection else None, 'settings': settings, 'faq': db.list_faq_entries(uid), 'knowledge': db.list_kb_entries(uid), 'schedules': db.list_schedule_rules(uid), 'ai_usage': db.get_ai_usage(uid, datetime.now(zone).date().isoformat())}
 
 
 @app.patch('/api/settings')
@@ -332,14 +351,16 @@ def analytics(user: User, days: int = Query(1)):
 
 
 @app.post('/api/test')
-def test_reply(body: TestMessage, user: User):
+def test_reply(body: TestMessage, user: User, request: Request):
     db, logic, _ = modules()
     uid = user['id']
     settings = db.get_settings(uid)
     entries = db.get_enabled_faq_entries(uid) if settings.get('faq_enabled') and plan(uid) in ['plus', 'pro', 'ultra'] else []
     match = logic.match_faq(body.message, entries)
     # Preview only: does not consume AI quota or send Telegram messages.
-    return {'source': 'Smart FAQ' if match else 'Oddiy javob', 'text': match['answer'] if match else settings.get('auto_reply_text') or db.DEFAULT_AUTO_REPLY_TEXT}
+    return {'source': 'Smart FAQ' if match else translate('Oddiy javob', request.headers.get('accept-language')),
+            'text': match['answer'] if match else settings.get('auto_reply_text') or db.DEFAULT_AUTO_REPLY_TEXT}
 
 
 app.mount('/', StaticFiles(directory=Path(__file__).resolve().parents[1] / 'dist', html=True), name='webapp')
+
