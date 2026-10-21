@@ -48,5 +48,16 @@ export function translateChrome() {
 }
 
 export function languageSelector(id) {
-  return `<select id="${id}" class="language-select" data-language aria-label="${tr('Tilni tanlash')}">${Object.entries(languages).map(([code, name]) => `<option value="${code}" ${code === language ? 'selected' : ''}>${name}</option>`).join('')}</select>`;
+  const globe = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></svg>';
+  const check = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+  return `<div class="language-switcher" data-language-switcher>
+    <button type="button" id="${id}" class="language-trigger" data-language-trigger data-current-language="${language}" aria-label="${tr('Tilni tanlash')}: ${languages[language]}" aria-haspopup="menu" aria-expanded="false" aria-controls="${id}-menu">
+      ${globe}<span class="language-current">${languages[language]}</span><span class="language-short" aria-hidden="true">${language.toUpperCase()}</span><svg class="language-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+    </button>
+    <div id="${id}-menu" class="language-menu" role="menu" aria-label="${tr('Tilni tanlash')}" hidden>
+      <div class="language-menu-heading">${globe}<span>${tr('Interfeys tili')}</span></div>
+      ${Object.entries(languages).map(([code, name]) => `<button type="button" class="language-option ${code === language ? 'is-selected' : ''}" role="menuitemradio" aria-checked="${code === language}" tabindex="-1" data-language-option="${code}" data-language-owner="${id}" lang="${code}"><span class="language-badge" aria-hidden="true">${code.toUpperCase()}</span><span class="language-name">${name}</span><span class="language-check">${code === language ? check : ''}</span></button>`).join('')}
+      <div class="language-menu-note">${tr('Tanlov shu qurilmada saqlanadi.')}</div>
+    </div>
+  </div>`;
 }

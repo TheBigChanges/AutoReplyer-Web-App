@@ -2,7 +2,7 @@
 import json
 import os
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 artifacts = Path('artifacts')
 artifacts.mkdir(exist_ok=True)
@@ -28,7 +28,7 @@ with sync_playwright() as p:
     page.locator('#entry-form [name=keywords]').fill('test, sinov')
     page.locator('#entry-form [name=content]').fill('Sinov javobi')
     page.locator('#entry-form [type=submit]').click()
-    assert page.get_by_role('heading', name='Test savol', exact=True).count() == 1
+    expect(page.get_by_role('heading', name='Test savol', exact=True)).to_have_count(1)
     page.locator('#entry-search').fill('topilmaydigan')
     assert page.locator('#no-results').is_visible()
     page.goto(base_url + '/#replies')

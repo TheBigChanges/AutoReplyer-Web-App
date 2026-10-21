@@ -20,3 +20,9 @@ node tests/test_i18n.mjs
 Browser checks require Playwright and installed Google Chrome. Start a static
 server for `dist/`, then run `tests/browser_check.py` and `tests/browser_i18n.py`.
 Set `AR_BASE_URL` if using a port other than 8765.
+
+The language picker supports mouse, touch and keyboard navigation, Escape and
+outside dismissal. `dist/interactions.js` adds brief page entrances, chart
+reveals, press feedback, modal transitions and save indicators. Animations honor
+the device's reduced-motion preference. Run `tests/browser_interactions.py` to
+check focus, rapid navigation, menu bounds, save feedback and reduced motion.

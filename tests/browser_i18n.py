@@ -12,6 +12,15 @@ LABELS = {
     'en': ['Hello', 'Auto-reply', 'AI assistant', 'Smart FAQ', 'Knowledge base', 'Smart scheduler', 'Analytics', 'Sleep mode', 'Profile tools', 'Your ideal plan', 'Settings', 'Getting started is easy'],
 }
 STUB = 'window.Telegram={WebApp:{initData:"",ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){}}};'
+def choose_language(page, language, owner='header-language'):
+    trigger = page.locator('#' + owner)
+    if trigger.get_attribute('data-current-language') == language:
+        return
+    trigger.click()
+    page.locator(f'#{owner}-menu [data-language-option="{language}"]').click()
+    expect(page.locator('#' + owner)).to_have_attribute('data-current-language', language)
+
+
 Path('artifacts').mkdir(exist_ok=True)
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True, args=['--no-sandbox'])
@@ -27,14 +36,14 @@ with sync_playwright() as p:
     original = page.locator('[name=auto_reply_text]').input_value()
     draft = 'Keep this original user text: Привет, salom, hello <safe>'
     page.locator('[name=auto_reply_text]').fill(draft)
-    page.locator('#header-language').select_option('ru')
+    choose_language(page, 'ru', 'header-language')
     assert page.locator('[name=auto_reply_text]').input_value() == draft
     assert page.locator('#reply-preview').inner_text() == draft
     page.reload()
     assert page.locator('[name=auto_reply_text]').input_value() == original
-    assert page.locator('#header-language').input_value() == 'ru'
+    assert page.locator('#header-language').get_attribute('data-current-language') == 'ru'
     for language in ['uz', 'ru', 'en']:
-        page.locator('#header-language').select_option(language)
+        choose_language(page, language, 'header-language')
         for width in [1440, 768, 390, 320]:
             page.set_viewport_size({'width': width, 'height': 900})
             for route, heading in zip(ROUTES, LABELS[language]):
@@ -43,9 +52,9 @@ with sync_playwright() as p:
                 assert page.locator('html').get_attribute('lang') == language
                 assert page.locator('h1').inner_text().startswith(heading), (language, route)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (language, width, route)
-                assert page.locator('#header-language').input_value() == language
+                assert page.locator('#header-language').get_attribute('data-current-language') == language
                 if route == 'settings':
-                    assert page.locator('#settings-language').input_value() == language
+                    assert page.locator('#settings-language').get_attribute('data-current-language') == language
                 # Application text must not expose unresolved interpolation placeholders.
                 assert not page.locator('#main').evaluate('(el)=>/\\{\\d+\\}/.test(el.innerText)'), (language, route)
         if language != 'uz':
@@ -53,8 +62,8 @@ with sync_playwright() as p:
             page.goto(BASE + '/#dashboard')
             page.screenshot(path=f'artifacts/desktop-{language}.png', full_page=True)
     page.goto(BASE + '/#settings')
-    page.locator('#settings-language').select_option('ru')
-    assert page.locator('#header-language').input_value() == 'ru'
+    choose_language(page, 'ru', 'settings-language')
+    assert page.locator('#header-language').get_attribute('data-current-language') == 'ru'
     page.goto(BASE + '/#scheduler')
     page.locator('[data-action=add-schedule]').click()
     assert page.locator('.day-picker label').first.inner_text() == 'Пн'
@@ -89,11 +98,11 @@ with sync_playwright() as p:
     live.goto(BASE)
     live.wait_for_function('document.documentElement.lang === "ru"')
     assert live.locator('h1').inner_text().startswith('Здравствуйте')
-    live.locator('#header-language').select_option('en')
+    choose_language(live, 'en', 'header-language')
     assert all(r['method'] == 'GET' for r in requests), 'Changing language must not change bot settings.'
     live.reload()
     live.wait_for_function('document.querySelector("h1")?.textContent.startsWith("Hello")')
-    assert live.locator('#header-language').input_value() == 'en'
+    assert live.locator('#header-language').get_attribute('data-current-language') == 'en'
     live.goto(BASE + '/#ai')
     live.locator('[data-setting=ai_enabled]').locator('xpath=..').click()
     expect(live.locator('#toast')).to_contain_text('higher plan')
@@ -103,7 +112,7 @@ with sync_playwright() as p:
     live_context.route('**/api/**', lambda route: route.fulfill(status=401, json={'detail': 'Expired'}))
     live.reload()
     live.get_by_role('heading', name='Could not connect to the API').wait_for()
-    live.locator('#header-language').select_option('ru')
+    choose_language(live, 'ru', 'header-language')
     assert live.get_by_role('heading', name='Не удалось подключиться к API').count() == 1
     assert not errors, errors
     browser.close()

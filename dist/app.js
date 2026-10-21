@@ -1,4 +1,5 @@
 import { tr, getLanguage, getLocale, setLanguage, normalizeLanguage, weekDays, translateChrome, languageSelector } from './i18n.js';
+import {animatePage, animateNotice, showDialog, closeDialog, initInteractions} from './interactions.js';
 const paths = {
   reply: 'M9 10V4L2 11l7 7v-6h5c4 0 6 3 6 7 3-9-1-13-11-13',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -134,6 +135,7 @@ function toast(message) {
   const t = document.querySelector('#toast');
   t.textContent = message;
   t.classList.add('visible');
+  animateNotice(t);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('visible'), 4200);
 }
@@ -195,7 +197,7 @@ function head(title, sub, actions = '', eyebrow = tr("SIZNING BOSHQARUV MARKAZIN
   return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p class="subtitle">${sub}</p></div>${actions}</div>`;
 }
 function button(label, action, ic = 'plus', cls = '') {
-  return `<button class="button ${cls}" data-action="${action}">${icon(ic)}${label}</button>`;
+  return `<button type="button" class="button ${cls}" data-action="${action}">${icon(ic)}${label}</button>`;
 }
 function featureRow(ic, title, sub, control) {
   return `<div class="feature-row"><span class="feature-icon">${icon(ic)}</span><div><strong>${title}</strong><small>${sub}</small></div>${control}</div>`;
@@ -383,6 +385,7 @@ function render() {
   banner.innerHTML = mode === 'live' ? `<span>${icon('shield')}<strong>${tr("Telegram orqali tasdiqlangan")}</strong><span class="demo-note">${tr("— o‘zgarishlar bot hisobingizga saqlanadi.")}</span></span><a href="#settings">${tr("Hisob ↗")}</a>` : mode === 'error' ? `<span>${icon('shield')}<strong>${tr("Botga ulanish talab etiladi")}</strong></span><a href="#settings">${tr("Ulanishni sozlash ↗")}</a>` : `<span>${icon('flask')}<strong>${tr("Demo rejim")}</strong><span class="demo-note">${tr("— namunaviy ma’lumotlar. O‘zgarishlar faqat shu qurilmada saqlanadi.")}</span></span><a href="#settings">${tr("Botni ulash ↗")}</a>`;
   if (mode === 'error' && page !== 'settings' && page !== 'help') {
     document.querySelector('#main').innerHTML = head(tr("Hisobga ulanish"), tr("Haqiqiy sozlamalarni ochish uchun API bilan ulaning.")) + `<section class="card empty">${icon('shield')}<h3>${tr("API bilan aloqa o‘rnatilmadi")}</h3><p>${tr("API manzilini sozlang yoki demo rejimini tanlab ilovani ko‘rib chiqing.")}</p><div class="button-group" style="justify-content:center"><a class="button primary" href="#settings">${tr("Ulanishni sozlash")}</a>${button(tr("Demoni ochish"), 'enter-demo', 'flask')}</div></section>`;
+    animatePage(document.querySelector('#main'), `${page}:${getLanguage()}:error`);
     return;
   }
   if (mode === 'demo') summary = demoSummary();
@@ -402,10 +405,11 @@ function render() {
   }[page]();
   if (page === 'settings') document.querySelector('#main').insertAdjacentHTML('beforeend', `<section class="card mobile-sections" style="margin-top:20px"><h2>${tr("Barcha bo‘limlar")}</h2><div class="quick-grid">${[...navigation, ['plans', 'crown', tr("Tariflar")], ['help', 'help', tr("Yordam markazi")]].filter(n => n[0] !== 'settings').map(([key, ic, t]) => `<a class="quick-item" href="#${key}"><span class="quick-icon">${icon(ic)}</span><strong>${t}</strong><span>↗</span></a>`).join('')}</div></section>`);
   paintIcons();
+  animatePage(document.querySelector('#main'), `${page}:${getLanguage()}`);
 }
 function modal(content) {
   document.querySelector('#modal-content').innerHTML = content;
-  document.querySelector('#modal').showModal();
+  showDialog(document.querySelector('#modal'));
 }
 function modalHead(title) {
   return `<div class="modal-head"><h2>${title}</h2><button class="icon-button" data-action="close-modal" aria-label="${tr("Yopish")}">${icon('close')}</button></div>`;
@@ -450,7 +454,7 @@ document.addEventListener('click', async event => {
       return;
     }
     if (action === 'close-modal') {
-      document.querySelector('#modal').close();
+      await closeDialog(document.querySelector('#modal'));
       return;
     }
     if (action === 'theme') {
@@ -474,7 +478,7 @@ document.addEventListener('click', async event => {
     if (action === 'confirm-reset') {
       state = structuredClone(seed);
       persist();
-      document.querySelector('#modal').close();
+      await closeDialog(document.querySelector('#modal'));
       render();
       toast(tr("Demo tiklandi"));
       return;
@@ -499,7 +503,7 @@ document.addEventListener('click', async event => {
       const key = kind === 'schedule' ? 'schedules' : kind;
       state[key] = state[key].filter(r => r.id !== Number(id));
       persist();
-      document.querySelector('#modal').close();
+      await closeDialog(document.querySelector('#modal'));
       render();
       toast(tr("Yozuv o‘chirildi"));
     }
@@ -532,18 +536,6 @@ async function changeLanguage(value) {
 }
 document.addEventListener('change', async event => {
   const el = event.target;
-  if (el.matches('[data-language]')) {
-    el.disabled = true;
-    try {
-      await changeLanguage(el.value);
-    } catch (err) {
-      el.value = getLanguage();
-      toast(err.message);
-    } finally {
-      el.disabled = false;
-    }
-    return;
-  }
   if (!el.dataset.setting && !el.dataset.toggle) return;
   el.disabled = true;
   try {
@@ -586,6 +578,7 @@ document.addEventListener('submit', async event => {
   event.preventDefault();
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;
+  submit.setAttribute('aria-busy', 'true');
   try {
     const data = new FormData(form);
     if (form.id === 'connection-form') {
@@ -681,7 +674,7 @@ document.addEventListener('submit', async event => {
         });
       }
       persist();
-      document.querySelector('#modal').close();
+      await closeDialog(document.querySelector('#modal'));
       render();
       toast(tr("Saqlandi"));
     }
@@ -690,6 +683,7 @@ document.addEventListener('submit', async event => {
     if (error) error.textContent = err.message;else toast(err.message);
   } finally {
     submit.disabled = false;
+    submit.removeAttribute('aria-busy');
   }
 });
 async function refreshSummary(value = period) {
@@ -716,9 +710,14 @@ window.addEventListener('hashchange', () => {
 document.querySelector('#modal').addEventListener('click', ev => {
   if (ev.target === ev.currentTarget) {
     const r = ev.currentTarget.getBoundingClientRect();
-    if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) ev.currentTarget.close();
+    if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) closeDialog(ev.currentTarget);
   }
 });
+document.querySelector('#modal').addEventListener('cancel', event => {
+  event.preventDefault();
+  closeDialog(event.currentTarget);
+});
+initInteractions({changeLanguage, reportError: toast});
 tg?.ready();
 tg?.expand();
 tg?.setHeaderColor?.('#f6f8f7');
