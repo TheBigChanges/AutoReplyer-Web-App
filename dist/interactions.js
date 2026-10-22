@@ -5,15 +5,39 @@ const pageAnimations = new Set();
 const closingDialogs = new WeakMap();
 const menuAnimations = new WeakMap();
 const mobileNavigations = new WeakMap();
-const ease = 'cubic-bezier(.2,.75,.25,1)';
+const activeAnimations = new WeakMap();
+const tokens = getComputedStyle(document.documentElement);
+const timing = (name, fallback) => parseFloat(tokens.getPropertyValue(`--motion-${name}`)) || fallback;
+const motion = {fast: timing('fast', 160), control: timing('control', 240), surface: timing('surface', 360), page: timing('page', 440), exit: timing('exit', 160)};
+const ease = tokens.getPropertyValue('--motion-ease').trim() || 'cubic-bezier(.22,1,.36,1)';
+const exitEase = tokens.getPropertyValue('--motion-exit-ease').trim() || 'cubic-bezier(.4,0,1,1)';
 let previousPage;
+let previousPeriod;
+
+function visualState(el) {
+  const style = getComputedStyle(el);
+  return {opacity: style.opacity, transform: style.transform};
+}
 
 function animate(el, frames, options = {}) {
-  if (reducedMotion.matches || !el?.animate) return null;
-  const animation = el.animate(frames, {duration: 220, easing: ease, fill: 'both', ...options});
+  if (reducedMotion.matches || !el?.animate || !el.isConnected) return null;
+  const previous = activeAnimations.get(el);
+  const originalWillChange = previous?.originalWillChange ?? el.style.willChange;
+  previous?.animation.cancel();
+  const hints = ['transform', 'opacity'].filter(key => frames.some(frame => key in frame));
+  if (hints.length) el.style.willChange = hints.join(', ');
+  const animation = el.animate(frames, {duration: motion.control, easing: ease, fill: 'both', ...options});
+  activeAnimations.set(el, {animation, originalWillChange});
   running.add(animation);
-  const cleanup = () => { running.delete(animation); animation.cancel(); };
-  animation.finished.then(cleanup, () => running.delete(animation));
+  const cleanup = () => {
+    running.delete(animation);
+    if (activeAnimations.get(el)?.animation === animation) {
+      el.style.willChange = originalWillChange;
+      activeAnimations.delete(el);
+    }
+    animation.cancel();
+  };
+  animation.finished.then(cleanup, cleanup);
   return animation;
 }
 
@@ -22,15 +46,21 @@ reducedMotion.addEventListener('change', event => {
 });
 
 export function animatePage(main, pageKey) {
-  if (pageKey === previousPage) return;
-  previousPage = pageKey;
   for (const animation of pageAnimations) animation.cancel();
   pageAnimations.clear();
+  const selected = main.querySelector('[data-period].active');
+  if (selected && selected.dataset.period !== previousPeriod) {
+    previousPeriod = selected.dataset.period;
+    animate(selected, [{transform: 'scale(.98)'}, {transform: 'scale(1)'}]);
+  }
+  if (pageKey === previousPage) return;
+  previousPage = pageKey;
   for (const [index, child] of [...main.children].entries()) {
+    if (child.getBoundingClientRect().top > innerHeight + 40) continue;
     const animation = animate(child, [
-      {opacity: 0, transform: 'translateY(9px)'},
-      {opacity: 1, transform: 'translateY(0)'}
-    ], {duration: 260, delay: Math.min(index, 4) * 32});
+      {opacity: 0, transform: `translate3d(0,${index === 0 ? 8 : 14}px,0)`},
+      {opacity: 1, transform: 'translate3d(0,0,0)'}
+    ], {duration: motion.page, delay: Math.min(index, 3) * 28});
     if (animation) {
       pageAnimations.add(animation);
       animation.finished.then(() => pageAnimations.delete(animation), () => pageAnimations.delete(animation));
@@ -42,7 +72,7 @@ export function animatePage(main, pageKey) {
     const animation = animate(line, [
       {strokeDasharray: `${length}`, strokeDashoffset: length},
       {strokeDasharray: `${length}`, strokeDashoffset: 0}
-    ], {duration: 550, delay: 90});
+    ], {duration: 600, delay: 60});
     if (animation) pageAnimations.add(animation);
   }
 }
@@ -59,7 +89,7 @@ function positionMobileIndicator(nav, state, allowMotion = false) {
     animate(nav, [
       {opacity: 0, transform: 'translate(-50%, 12px)'},
       {opacity: 1, transform: 'translate(-50%, 0)'}
-    ], {duration: 300});
+    ], {duration: motion.surface});
   }
   const active = nav.querySelector('a.active');
   const indicator = state.indicator;
@@ -71,19 +101,23 @@ function positionMobileIndicator(nav, state, allowMotion = false) {
   }
   const container = nav.getBoundingClientRect();
   const rect = active.getBoundingClientRect();
-  const previous = indicator.hidden ? null : indicator.getBoundingClientRect();
   const x = rect.left - container.left - nav.clientLeft;
   const y = active.offsetTop;
   const width = active.offsetWidth;
   const height = active.offsetHeight;
+  const target = `translate3d(${x}px, ${y}px, 0)`;
+  const last = state.target;
+  if (!indicator.hidden && state.key === active.hash && last && Math.abs(last.x - x) < .1 && last.y === y && last.width === width && last.height === height) return;
+  const previous = indicator.hidden ? null : indicator.getBoundingClientRect();
   state.animation?.cancel();
   indicator.hidden = false;
-  Object.assign(indicator.style, {transform: `translate(${x}px, ${y}px)`, width: `${width}px`, height: `${height}px`});
+  Object.assign(indicator.style, {transform: target, width: `${width}px`, height: `${height}px`});
+  state.target = {x, y, width, height};
   if (allowMotion && previous && state.key !== active.hash) {
     state.animation = animate(indicator, [
-      {transform: `translate(${previous.left - container.left - nav.clientLeft}px, ${y}px)`, width: `${previous.width}px`},
-      {transform: `translate(${x}px, ${y}px)`, width: `${width}px`}
-    ], {duration: 300});
+      {transform: `translate3d(${previous.left - container.left - nav.clientLeft}px, ${y}px, 0) scaleX(${previous.width / width})`},
+      {transform: `${target} scaleX(1)`}
+    ], {duration: motion.surface});
   }
   state.key = active.hash;
 }
@@ -125,24 +159,28 @@ export function updateMobileNavigation(nav, markup) {
 
 export function showDialog(dialog) {
   closeLanguageMenus();
+  const from = dialog.open ? visualState(dialog) : {opacity: 0, transform: 'translate3d(0,18px,0) scale(.985)'};
+  dialog.style.setProperty('--backdrop-from', dialog.open ? getComputedStyle(dialog, '::backdrop').opacity : '0');
   const pending = closingDialogs.get(dialog);
   if (pending) { closingDialogs.delete(dialog); pending.cancel(); }
   delete dialog.dataset.closing;
   if (!dialog.open) dialog.showModal();
   animate(dialog, [
-    {opacity: 0, transform: 'translateY(14px) scale(.98)'},
-    {opacity: 1, transform: 'translateY(0) scale(1)'}
-  ], {duration: 230});
+    from,
+    {opacity: 1, transform: 'translate3d(0,0,0) scale(1)'}
+  ], {duration: motion.surface});
 }
 
 export async function closeDialog(dialog) {
   if (!dialog.open || closingDialogs.has(dialog)) return;
-  // Cancel an unfinished entrance animation before animating the exit.
+  const from = visualState(dialog);
+  dialog.style.setProperty('--backdrop-from', getComputedStyle(dialog, '::backdrop').opacity);
+  // Retarget from the visible frame rather than jumping to a finished entrance.
   for (const animation of dialog.getAnimations()) animation.cancel();
   const animation = animate(dialog, [
-    {opacity: 1, transform: 'translateY(0) scale(1)'},
-    {opacity: 0, transform: 'translateY(7px) scale(.99)'}
-  ], {duration: 130});
+    from,
+    {opacity: 0, transform: 'translate3d(0,8px,0) scale(.992)'}
+  ], {duration: motion.exit, easing: exitEase});
   if (!animation) { dialog.close(); return; }
   dialog.dataset.closing = 'true';
   closingDialogs.set(dialog, animation);
@@ -154,11 +192,10 @@ export async function closeDialog(dialog) {
 }
 
 export function animateNotice(el) {
-  for (const animation of el.getAnimations()) animation.cancel();
   animate(el, [
-    {opacity: 0, transform: 'translate(-50%, 8px) scale(.98)'},
-    {opacity: 1, transform: 'translate(-50%, 0) scale(1)'}
-  ], {duration: 200});
+    visualState(el),
+    {opacity: 1, transform: 'translate(-50%, 0)'}
+  ], {duration: motion.surface});
 }
 
 function menuFor(trigger) { return document.getElementById(trigger.getAttribute('aria-controls')); }
@@ -167,9 +204,10 @@ function closeMenu(trigger, restoreFocus = false) {
   const menu = menuFor(trigger);
   if (!menu || menu.hidden || trigger.getAttribute('aria-expanded') === 'false') return;
   trigger.setAttribute('aria-expanded', 'false');
+  const from = visualState(menu);
   const old = menuAnimations.get(menu);
   old?.cancel();
-  const animation = animate(menu, [{opacity: 1}, {opacity: 0, transform: 'translateY(-3px) scale(.99)'}], {duration: 100});
+  const animation = animate(menu, [from, {opacity: 0, transform: `translate3d(0,${menu.closest('.opens-up') ? 3 : -3}px,0) scale(.992)`}], {duration: motion.exit, easing: exitEase});
   const finish = () => {
     if (menuAnimations.get(menu) !== animation) return;
     menu.hidden = true;
@@ -187,6 +225,7 @@ export function closeLanguageMenus() {
 function openMenu(trigger, focus = 'selected') {
   closeLanguageMenus();
   const menu = menuFor(trigger);
+  const from = menu.hidden ? null : visualState(menu);
   menuAnimations.get(menu)?.cancel();
   menuAnimations.delete(menu);
   menu.hidden = false;
@@ -195,9 +234,9 @@ function openMenu(trigger, focus = 'selected') {
   wrapper.classList.remove('opens-up');
   if (menu.getBoundingClientRect().bottom > innerHeight - 12) wrapper.classList.add('opens-up');
   const animation = animate(menu, [
-    {opacity: 0, transform: 'translateY(-5px) scale(.97)'},
-    {opacity: 1, transform: 'translateY(0) scale(1)'}
-  ], {duration: 170});
+    from || {opacity: 0, transform: `translate3d(0,${wrapper.classList.contains('opens-up') ? 5 : -5}px,0) scale(.985)`},
+    {opacity: 1, transform: 'translate3d(0,0,0) scale(1)'}
+  ], {duration: motion.surface});
   menuAnimations.set(menu, animation);
   const options = [...menu.querySelectorAll('[data-language-option]')];
   const target = focus === 'first' ? options[0] : focus === 'last' ? options.at(-1)
@@ -220,13 +259,17 @@ function pressFeedback(target, point) {
   target.classList.add('tap-target');
   target.append(wave);
   const animation = animate(wave, [
-    {opacity: .13, transform: 'translate(-50%,-50%) scale(0)'},
+    {opacity: .095, transform: 'translate(-50%,-50%) scale(.08)'},
     {opacity: 0, transform: 'translate(-50%,-50%) scale(1)'}
-  ], {duration: 400, easing: 'ease-out'});
+  ], {duration: 420, easing: ease});
   if (animation) animation.finished.then(() => wave.remove(), () => wave.remove()); else wave.remove();
 }
 
 export function initInteractions({changeLanguage, reportError}) {
+  document.addEventListener('change', event => {
+    if (!event.target.matches('.day-picker input,.role-option input')) return;
+    animate(event.target.nextElementSibling, [{transform: 'scale(.975)'}, {transform: 'scale(1)'}]);
+  });
   document.addEventListener('pointerdown', event => {
     if (!event.target.closest('[data-language-switcher]')) closeLanguageMenus();
     if (event.button !== 0 || !event.isPrimary) return;

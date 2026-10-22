@@ -28,6 +28,13 @@ reveals, press feedback, modal transitions and save indicators. Animations honor
 the device's reduced-motion preference. Run `tests/browser_interactions.py` to
 check focus, rapid navigation, menu bounds, save feedback and reduced motion.
 
+Motion timings and easing are shared CSS tokens in `dist/styles.css`. Entrances
+settle gently, presses respond quickly, and interrupted menus/dialogs resume from
+the visible frame. The mobile indicator moves using transforms; blur stays
+constant. Temporary compositor hints are released when effects finish.
+`tests/browser_motion.py` checks reversals, rapid tab changes, cleanup and changing
+the reduced-motion setting while animations are running.
+
 Security and regression audit: [AUDIT.md](AUDIT.md). Run
 `tests/browser_audit.py` against the FastAPI server to check drafts, request races,
 escaped content and credential routing with the production CSP enabled.
