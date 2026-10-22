@@ -85,3 +85,11 @@ The baseline did not send CSP and exposed `/openapi.json`; `/config.json` was
 absent as expected before this change. These observations confirm the service
 was reachable and running the source that was reviewed, without touching a real
 account or database.
+
+After implementation commit `a0cbc74b381b4dc60a1ae6168be9fa4fbbfc2460`, Render
+served `/app.js`, `/api-client.js` and `/config.json` byte-for-byte identical to
+the tested files. CSP, no-referrer, nosniff, permissions policy and cache rules
+were present. `/api/health` returned 200; unsigned `/api/bootstrap` returned 401;
+`/openapi.json` and `/server/auth.py` returned 404. A real Chrome visit to the
+public service exercised 12 routes, Uzbek/Russian/English and the 390 px mobile
+navigation with no page errors. No authenticated production writes were made.
