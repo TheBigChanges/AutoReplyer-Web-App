@@ -1,4 +1,5 @@
 import {messages} from './translations.js';
+import {storage} from './storage.js';
 
 export const languages = {uz: 'O‘zbekcha', ru: 'Русский', en: 'English'};
 export function normalizeLanguage(value) {
@@ -6,7 +7,7 @@ export function normalizeLanguage(value) {
   return Object.hasOwn(languages, code) ? code : null;
 }
 
-let language = normalizeLanguage(localStorage.getItem('ar-language'))
+let language = normalizeLanguage(storage.getItem('ar-language'))
   || normalizeLanguage(window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code)
   || normalizeLanguage(navigator.language) || 'uz';
 
@@ -17,7 +18,7 @@ export function setLanguage(value, remember = false) {
   if (!next) return false;
   language = next;
   document.documentElement.lang = next;
-  if (remember) localStorage.setItem('ar-language', next);
+  if (remember) storage.setItem('ar-language', next);
   return true;
 }
 
@@ -57,7 +58,7 @@ export function languageSelector(id) {
     <div id="${id}-menu" class="language-menu" role="menu" aria-label="${tr('Tilni tanlash')}" hidden>
       <div class="language-menu-heading">${globe}<span>${tr('Interfeys tili')}</span></div>
       ${Object.entries(languages).map(([code, name]) => `<button type="button" class="language-option ${code === language ? 'is-selected' : ''}" role="menuitemradio" aria-checked="${code === language}" tabindex="-1" data-language-option="${code}" data-language-owner="${id}" lang="${code}"><span class="language-badge" aria-hidden="true">${code.toUpperCase()}</span><span class="language-name">${name}</span><span class="language-check">${code === language ? check : ''}</span></button>`).join('')}
-      <div class="language-menu-note">${tr('Tanlov shu qurilmada saqlanadi.')}</div>
+      <div class="language-menu-note">${tr(storage.persistent ? 'Tanlov shu qurilmada saqlanadi.' : 'Tanlov faqat shu oyna ochiq turguncha saqlanadi.')}</div>
     </div>
   </div>`;
 }

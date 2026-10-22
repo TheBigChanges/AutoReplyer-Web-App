@@ -1,6 +1,7 @@
 import { tr, getLanguage, getLocale, setLanguage, normalizeLanguage, weekDays, translateChrome, languageSelector } from './i18n.js';
 import {animatePage, animateNotice, showDialog, closeDialog, initInteractions, updateMobileNavigation} from './interactions.js';
 import {requestJSON, trustedApiBase} from './api-client.js';
+import {storage} from './storage.js';
 const paths = {
   reply: 'M9 10V4L2 11l7 7v-6h5c4 0 6 3 6 7 3-9-1-13-11-13',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -48,7 +49,7 @@ const minutes = s => s.split(':').reduce((h, m) => Number(h) * 60 + Number(m));
 let days = weekDays();
 const navigationKeys = [['dashboard', 'dashboard', 'Umumiy ko‘rinish'], ['replies', 'message', 'Avtojavob'], ['ai', 'sparkles', 'AI yordamchi', 'ULTRA'], ['faq', 'book', 'Smart FAQ'], ['knowledge', 'book', 'Bilimlar bazasi'], ['scheduler', 'calendar', 'Smart jadval'], ['analytics', 'chart', 'Statistika'], ['sleep', 'moon', 'Uyqu rejimi'], ['profile', 'clock', 'Profil vositalari'], ['settings', 'settings', 'Sozlamalar']];
 const tg = window.Telegram?.WebApp;
-let apiBase = localStorage.getItem('ar-api') || '';
+let apiBase = storage.getItem('ar-api') || '';
 let mode = tg?.initData ? 'loading' : 'demo',
   period = 7,
   page = 'dashboard',
@@ -125,7 +126,7 @@ const seed = {
 };
 let state;
 try {
-  state = JSON.parse(localStorage.getItem('ar-demo-v1')) || structuredClone(seed);
+  state = JSON.parse(storage.getItem('ar-demo-v1')) || structuredClone(seed);
 } catch {
   state = structuredClone(seed);
 }
@@ -135,6 +136,17 @@ let renderedKey;
 let summaryRequest = 0;
 let connectionRequest = 0;
 const pendingForms = new WeakSet();
+const pendingMainForms = new Map();
+const pendingChanges = new Map();
+const accountKey = () => `${mode}:${state.user.id}`;
+const formKey = form => `${accountKey()}:${form.id}:${form.dataset.kind || ''}`;
+const changeKey = input => `${accountKey()}:${input.dataset.setting ? `setting:${input.dataset.setting}` : `toggle:${input.dataset.toggle}`}`;
+function restorePendingChanges() {
+  for (const input of document.querySelectorAll('[data-setting],[data-toggle]')) {
+    const pending = pendingChanges.get(changeKey(input));
+    if (pending) { input.checked = pending.checked; input.disabled = true; }
+  }
+}
 function paintIcons(root = document) {
   root.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
 }
@@ -147,8 +159,9 @@ function toast(message) {
   toastTimer = setTimeout(() => t.classList.remove('visible'), 4200);
 }
 function persist() {
-  if (mode === 'demo') localStorage.setItem('ar-demo-v1', JSON.stringify(state));
+  if (mode === 'demo') storage.setItem('ar-demo-v1', JSON.stringify(state));
 }
+const demoNotice = message => tr(!storage.persistent ? 'O‘zgarishlar faqat shu oynada saqlandi.' : message);
 async function api(path, method = 'GET', body) {
   try {
     return await requestJSON(apiBase, path, {method, body, initData: tg?.initData || '', language: getLanguage()});
@@ -164,7 +177,7 @@ async function loadLive() {
   state = loaded;
   summaryRequest++;
   // An explicit Web App choice wins; otherwise start in the bot's saved language.
-  const initialLanguage = normalizeLanguage(localStorage.getItem('ar-language')) || normalizeLanguage(state.language);
+  const initialLanguage = normalizeLanguage(storage.getItem('ar-language')) || normalizeLanguage(state.language);
   if (initialLanguage) setLanguage(initialLanguage);
   mode = 'live';
   period = 1;
@@ -365,7 +378,6 @@ function render() {
   const route = location.hash.slice(1) || 'dashboard';
   const key = `${route}:${mode}:${state.user.id}`;
   const drafts = renderedKey === key ? captureDrafts() : [];
-  const busyForms = renderedKey === key ? [...document.querySelectorAll('#main form')].filter(form => pendingForms.has(form)) : [];
   renderedKey = key;
   translateChrome();
   document.querySelector('#language-control').innerHTML = languageSelector('header-language');
@@ -411,8 +423,12 @@ function render() {
     help
   }[page]();
   if (page === 'settings') document.querySelector('#main').insertAdjacentHTML('beforeend', `<section class="card mobile-sections" style="margin-top:20px"><h2>${tr("Barcha bo‘limlar")}</h2><div class="quick-grid">${[...navigation, ['plans', 'crown', tr("Tariflar")], ['help', 'help', tr("Yordam markazi")]].filter(n => n[0] !== 'settings').map(([key, ic, t]) => `<a class="quick-item" href="#${key}"><span class="quick-icon">${icon(ic)}</span><strong>${t}</strong><span>↗</span></a>`).join('')}</div></section>`);
-  for (const form of busyForms) document.getElementById(form.id)?.replaceWith(form);
+  for (const form of document.querySelectorAll('#main form')) {
+    const pending = pendingMainForms.get(formKey(form));
+    if (pending) form.replaceWith(pending);
+  }
   restoreDrafts(drafts);
+  restorePendingChanges();
   paintIcons();
   animatePage(document.querySelector('#main'), `${page}:${getLanguage()}`);
 }
@@ -559,30 +575,35 @@ async function changeLanguage(value) {
   // Preserve unsaved text while rebuilding labels in the chosen language.
   setLanguage(value, true);
   render();
-  toast(tr('Til saqlandi'));
+  toast(tr(storage.persistent ? 'Til saqlandi' : 'Til faqat shu oynada almashtirildi.'));
 }
 document.addEventListener('change', async event => {
   const el = event.target;
   if (!el.dataset.setting && !el.dataset.toggle) return;
   if (!['demo', 'live'].includes(mode)) return;
+  const key = changeKey(el);
+  if (pendingChanges.has(key)) { restorePendingChanges(); return; }
+  const checked = el.checked;
+  pendingChanges.set(key, {checked});
   el.disabled = true;
   try {
     if (el.dataset.setting) await saveSettings({
-      [el.dataset.setting]: el.checked
+      [el.dataset.setting]: checked
     });else {
       const [kind, id] = el.dataset.toggle.split(':');
       const key = kind === 'schedule' ? 'schedules' : kind;
       const result = mode === 'live' ? await api(`/api/${kind}/${id}/toggle`, 'POST') : null;
-      state[key].find(r => r.id === Number(id)).is_enabled = result?.is_enabled ?? el.checked;
+      const item = state[key].find(r => r.id === Number(id));
+      if (item) item.is_enabled = result?.is_enabled ?? checked;
       persist();
     }
-    render();
-    toast(mode === 'demo' ? tr("Demo qurilmada saqlandi") : tr("Bot sozlamalari saqlandi"));
+    toast(mode === 'demo' ? demoNotice("Demo qurilmada saqlandi") : tr("Bot sozlamalari saqlandi"));
   } catch (err) {
-    el.checked = !el.checked;
     toast(err.message);
   } finally {
+    pendingChanges.delete(key);
     el.disabled = false;
+    render();
   }
 });
 document.addEventListener('input', event => {
@@ -607,6 +628,8 @@ document.addEventListener('submit', async event => {
   if (pendingForms.has(form)) return;
   if (form.id !== 'connection-form' && !['demo', 'live'].includes(mode)) return;
   pendingForms.add(form);
+  const pendingKey = formKey(form);
+  if (form.closest('#main')) pendingMainForms.set(pendingKey, form);
   const submittedLanguage = getLanguage();
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;
@@ -618,9 +641,9 @@ document.addEventListener('submit', async event => {
       try { value = await trustedApiBase(data.get('api')); }
       catch { throw Error(tr("API manzili ishonchli ro‘yxatda yo‘q. Administrator bilan bog‘laning.")); }
       apiBase = value;
-      localStorage.setItem('ar-api', value);
+      storage.setItem('ar-api', value);
       if (!tg?.initData) {
-        toast(tr("API manzili saqlandi. Haqiqiy hisobga kirish uchun Telegram’dan oching."));
+        toast(demoNotice("API manzili saqlandi. Haqiqiy hisobga kirish uchun Telegram’dan oching."));
         return;
       }
       await loadLive();
@@ -637,7 +660,7 @@ document.addEventListener('submit', async event => {
       if (mode === 'live' && !['plus', 'pro', 'ultra'].includes(state.plan) && form.dataset.kind === 'replies') delete values.auto_reply_text;
       if (mode === 'live' && state.plan === 'free' && form.dataset.kind === 'sleep') delete values.sleep_reply_text;
       await saveSettings(values);
-      toast(mode === 'demo' ? tr("Demo sozlamalari saqlandi") : tr("Sozlamalar botga saqlandi"));
+      toast(mode === 'demo' ? demoNotice("Demo sozlamalari saqlandi") : tr("Sozlamalar botga saqlandi"));
       return;
     }
     if (form.id === 'test-form') {
@@ -716,6 +739,7 @@ document.addEventListener('submit', async event => {
     if (error) error.textContent = err.message;else toast(err.message);
   } finally {
     pendingForms.delete(form);
+    pendingMainForms.delete(pendingKey);
     submit.disabled = false;
     submit.removeAttribute('aria-busy');
     if (form.isConnected && submittedLanguage !== getLanguage()) render();
@@ -731,10 +755,13 @@ async function refreshSummary(value = period) {
 }
 function theme() {
   const dark = document.documentElement.classList.toggle('dark');
-  localStorage.setItem('ar-theme', dark ? 'dark' : 'light');
-  document.querySelector('#theme-button').innerHTML = icon(dark ? 'sun' : 'moon');
+  storage.setItem('ar-theme', dark ? 'dark' : 'light');
+  const button = document.querySelector('#theme-button');
+  button.dataset.icon = dark ? 'sun' : 'moon';
+  button.innerHTML = icon(button.dataset.icon);
 }
-if (localStorage.getItem('ar-theme') === 'dark') document.documentElement.classList.add('dark');
+if (storage.getItem('ar-theme') === 'dark') document.documentElement.classList.add('dark');
+document.querySelector('#theme-button').dataset.icon = document.documentElement.classList.contains('dark') ? 'sun' : 'moon';
 document.querySelector('#theme-button').addEventListener('click', theme);
 window.addEventListener('hashchange', () => {
   render();

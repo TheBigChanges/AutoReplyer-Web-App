@@ -93,3 +93,31 @@ were present. `/api/health` returned 200; unsigned `/api/bootstrap` returned 401
 `/openapi.json` and `/server/auth.py` returned 404. A real Chrome visit to the
 public service exercised 12 routes, Uzbek/Russian/English and the 390 px mobile
 navigation with no page errors. No authenticated production writes were made.
+
+## Follow-up bug check — 2026-10-22
+
+Four additional UI defects were reproduced against the audited version and fixed:
+
+- Pending switches lost their optimistic checked value and became clickable again
+  after language changes or navigating away/back. Operations are now keyed to the
+  account and setting/entry; rebuilt controls retain checked/disabled state until
+  completion, reject duplicate changes, and roll back correctly on failure.
+  A delayed toggle also tolerates an entry being deleted in the meantime.
+- A pending settings form was tracked only while its DOM node stayed mounted.
+  Returning to that screen could enable a duplicate save and lose the pending
+  draft. Pending main forms now survive route changes, scoped by account/form kind;
+  unrelated forms remain usable. The original busy form is restored on return.
+- Denied localStorage access stopped module initialization and left a blank app;
+  quota failures could also interrupt preferences and demo saves. `dist/storage.js`
+  catches both failures and retains values in the current window. The UI says
+  when changes/choices are session-only rather than claiming device persistence.
+- The theme button's static icon marker overwrote its current icon during render,
+  and a remembered dark theme still started with the moon icon. The marker now
+  tracks the actual theme on startup and after switching, so renders stay correct.
+
+`tests/browser_followup.py` exercises held requests, navigation, retry and failure,
+duplicate prevention, authoritative entry toggle results, blocked storage, quota
+failure and theme icon persistence. It passes alongside the four existing Chrome
+suites with no page errors. Node translation checks now cover 349 messages. The
+backend, authentication, tariff rules and original bot code are unchanged by this
+follow-up.

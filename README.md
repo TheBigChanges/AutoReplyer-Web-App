@@ -31,6 +31,9 @@ check focus, rapid navigation, menu bounds, save feedback and reduced motion.
 Security and regression audit: [AUDIT.md](AUDIT.md). Run
 `tests/browser_audit.py` against the FastAPI server to check drafts, request races,
 escaped content and credential routing with the production CSP enabled.
+`tests/browser_followup.py` checks pending controls across navigation/language
+changes, storage-denied/quota fallback and the theme icon. When browser storage
+is unavailable, the app keeps working and identifies choices as window-only.
 
 API trust policy is deployment-owned in `dist/config.json`. The default
 `{"apiOrigins": []}` allows the same-origin API. If the API is hosted separately,
