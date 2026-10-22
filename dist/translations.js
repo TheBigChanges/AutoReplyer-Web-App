@@ -1,5 +1,6 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
+Orqaga|Назад|Back
 O‘zgarishlar faqat shu oynada saqlandi.|Изменения сохранены только в этом окне.|Changes are saved only in this window.
 Til faqat shu oynada almashtirildi.|Язык изменён только в этом окне.|The language was changed only in this window.
 Tanlov faqat shu oyna ochiq turguncha saqlanadi.|Выбор сохранится только пока это окно открыто.|Your choice is kept only while this window is open.

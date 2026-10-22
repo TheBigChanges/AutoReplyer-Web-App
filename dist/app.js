@@ -2,6 +2,8 @@ import { tr, getLanguage, getLocale, setLanguage, normalizeLanguage, weekDays, t
 import {animatePage, animateNotice, showDialog, closeDialog, initInteractions, updateMobileNavigation} from './interactions.js';
 import {requestJSON, trustedApiBase} from './api-client.js';
 import {storage} from './storage.js';
+import {createNavigation} from './navigation.js';
+const appNavigation = createNavigation();
 const paths = {
   reply: 'M9 10V4L2 11l7 7v-6h5c4 0 6 3 6 7 3-9-1-13-11-13',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -385,6 +387,7 @@ function render() {
   const navigation = navigationKeys.map(([key, ic, label, badge]) => [key, ic, tr(label), badge]);
   page = location.hash.slice(1) || 'dashboard';
   if (![...navigation.map(n => n[0]), 'plans', 'help'].includes(page)) page = 'dashboard';
+  document.querySelector('#back-button').hidden = page === 'dashboard';
   const label = navigation.find(n => n[0] === page)?.[2] || {
     plans: tr("Tariflar"),
     help: tr("Yordam markazi")
@@ -490,6 +493,10 @@ document.addEventListener('click', async event => {
   const action = el.dataset.action;
   let busy = false;
   try {
+    if (action === 'back') {
+      appNavigation.back();
+      return;
+    }
     if (el.dataset.period) {
       const value = Number(el.dataset.period);
       if (mode === 'live') {
@@ -764,6 +771,7 @@ if (storage.getItem('ar-theme') === 'dark') document.documentElement.classList.a
 document.querySelector('#theme-button').dataset.icon = document.documentElement.classList.contains('dark') ? 'sun' : 'moon';
 document.querySelector('#theme-button').addEventListener('click', theme);
 window.addEventListener('hashchange', () => {
+  appNavigation.sync();
   render();
   window.scrollTo({
     top: 0,

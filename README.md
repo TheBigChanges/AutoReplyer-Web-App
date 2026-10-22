@@ -35,6 +35,11 @@ escaped content and credential routing with the production CSP enabled.
 changes, storage-denied/quota fallback and the theme icon. When browser storage
 is unavailable, the app keeps working and identifies choices as window-only.
 
+The header Back arrow returns to the previous section in the current app visit.
+Direct links and reloaded sections fall back to Dashboard; Dashboard hides the
+arrow. `tests/browser_navigation.py` covers native Back/Forward, deep links,
+keyboard activation, translated labels and responsive glass styling.
+
 API trust policy is deployment-owned in `dist/config.json`. The default
 `{"apiOrigins": []}` allows the same-origin API. If the API is hosted separately,
 add its exact HTTPS origin (for example `https://api.example.com`) before deploying

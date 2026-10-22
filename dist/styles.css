@@ -83,6 +83,18 @@ dialog[data-closing]::backdrop{animation:backdrop-out .13s ease-in both}
     .dark .mobile-nav{background:rgba(26,42,33,.82);border-color:rgba(153,188,165,.19)}
   }
 }
+/* Header back control follows the same glass and press treatment as the dock. */
+.top-navigation{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
+.top-navigation .breadcrumb{min-width:0}
+.icon-button.back-button{display:inline-grid;place-items:center;flex-shrink:0;width:36px;height:36px;padding:0;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--green);box-shadow:0 2px 8px #153d3209,inset 0 1px 0 #ffffff60}
+.back-button[hidden]{display:none}
+.back-button:not([hidden]){animation:back-button-in .2s cubic-bezier(.2,.75,.25,1)}
+.back-button svg{width:18px;height:18px}
+.back-button:active>svg{transform:translateX(-3px) scale(.9)}
+.dark .icon-button.back-button{box-shadow:0 2px 8px #0002,inset 0 1px 0 #ffffff08}
+@keyframes back-button-in{from{opacity:0;transform:translateX(4px)}to{opacity:1;transform:translateX(0)}}
+@media(hover:hover) and (pointer:fine){.icon-button.back-button:hover{border-color:#93bba0;background:var(--mint);border-radius:11px;box-shadow:0 3px 12px #153d3212}.back-button:hover>svg{transform:translateX(-2px)}}
+@media(max-width:660px){.top-navigation{gap:9px}.icon-button.back-button{width:38px;height:38px}}
 /* Consistent feedback for navigation, choices and actions. */
 button:not(:disabled),.avatar,.brand,.help-link,.upgrade a,#navigation a{transition:transform .18s cubic-bezier(.2,.75,.25,1),background-color .18s,border-color .18s,color .18s,box-shadow .18s}
 button:not(:disabled):not([aria-busy=true]):active,.avatar:active,.brand:active,.help-link:active,.upgrade a:active{transform:translateY(1px) scale(.97)}
@@ -124,12 +136,15 @@ button:not(:disabled):not([aria-busy=true]):active,.avatar:active,.brand:active,
 }
 /* Glass belongs to floating layers; opaque defaults remain the fallback. */
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .icon-button.back-button{background:rgba(239,248,242,.76);-webkit-backdrop-filter:blur(12px) saturate(135%);backdrop-filter:blur(12px) saturate(135%)}
+  .dark .icon-button.back-button{background:rgba(43,68,52,.8)}
   .language-menu,dialog{background:rgba(255,255,255,.91);-webkit-backdrop-filter:blur(22px) saturate(135%);backdrop-filter:blur(22px) saturate(135%);border-color:rgba(206,224,212,.8)}
   .dark .language-menu,.dark dialog{background:rgba(30,44,37,.94);border-color:rgba(130,165,143,.25)}
   dialog::backdrop{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
   #toast{background:rgba(23,61,50,.9);-webkit-backdrop-filter:blur(16px) saturate(130%);backdrop-filter:blur(16px) saturate(130%);border:1px solid #ffffff1a}
   .dark #toast{background:rgba(21,61,45,.93)}
 }
-@media(prefers-reduced-transparency:reduce){.language-menu,dialog,.mobile-nav{background:var(--surface)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}#toast{background:var(--deep)!important;-webkit-backdrop-filter:none;backdrop-filter:none}dialog::backdrop{-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(prefers-reduced-transparency:reduce){.language-menu,dialog,.mobile-nav,.back-button{background:var(--surface)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}#toast{background:var(--deep)!important;-webkit-backdrop-filter:none;backdrop-filter:none}dialog::backdrop{-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(prefers-reduced-motion:reduce){.back-button:hover>svg,.back-button:active>svg{transform:none!important}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}.button:active,.button:active>svg,.icon-button:active,.icon-button:active>svg,.quick-item:hover,.quick-item:active,.quick-item:hover .quick-icon,.stat:hover,.plan-card:hover,.language-trigger:active,.language-option:active,.day-picker label:active span,.role-option:active span,.mobile-nav a.active svg,.mobile-nav a:active svg,button:active,.avatar:active,.brand:active,.help-link:active,.upgrade a:active,#navigation a:active,#navigation a.active>svg,#navigation a:hover>svg,.help-link:hover>span:first-child{transform:none!important}}
 
