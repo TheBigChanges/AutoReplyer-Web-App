@@ -1,5 +1,6 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
+API manzili ishonchli ro‘yxatda yo‘q. Administrator bilan bog‘laning.|Адрес API отсутствует в списке доверенных. Обратитесь к администратору.|The API address is not trusted. Contact the administrator.
 Umumiy ko‘rinish|Обзор|Overview
 Avtojavob|Автоответ|Auto-reply
 AI yordamchi|ИИ-помощник|AI assistant

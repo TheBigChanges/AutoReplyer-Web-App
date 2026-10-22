@@ -8,6 +8,8 @@ def language_code(value: str | None) -> str:
 
 
 MESSAGES = {
+    'So‘rov hajmi juda katta.': ('Размер запроса слишком большой.', 'The request body is too large.'),
+    'So‘rov vaqti tugadi.': ('Время ожидания запроса истекло.', 'The request timed out.'),
     'Telegram orqali oching yoki sessiyani yangilang.': ('Откройте приложение в Telegram или обновите сеанс.', 'Open the app in Telegram or refresh your session.'),
     'Telegram sessiyasi yaroqsiz yoki eskirgan. Ilovani qayta oching.': ('Сеанс Telegram недействителен или устарел. Откройте приложение заново.', 'Your Telegram session is invalid or expired. Reopen the app.'),
     'Juda ko‘p so‘rov. Bir oz kuting.': ('Слишком много запросов. Немного подождите.', 'Too many requests. Please wait a moment.'),

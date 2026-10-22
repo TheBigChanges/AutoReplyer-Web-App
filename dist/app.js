@@ -1,5 +1,6 @@
 import { tr, getLanguage, getLocale, setLanguage, normalizeLanguage, weekDays, translateChrome, languageSelector } from './i18n.js';
 import {animatePage, animateNotice, showDialog, closeDialog, initInteractions, updateMobileNavigation} from './interactions.js';
+import {requestJSON, trustedApiBase} from './api-client.js';
 const paths = {
   reply: 'M9 10V4L2 11l7 7v-6h5c4 0 6 3 6 7 3-9-1-13-11-13',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -128,6 +129,12 @@ try {
 } catch {
   state = structuredClone(seed);
 }
+// Recover malformed demo storage before rendering either account mode.
+if (typeof state?.user?.first_name !== 'string' || !state?.settings || !['faq', 'knowledge', 'schedules'].every(key => Array.isArray(state[key]))) state = structuredClone(seed);
+let renderedKey;
+let summaryRequest = 0;
+let connectionRequest = 0;
+const pendingForms = new WeakSet();
 function paintIcons(root = document) {
   root.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
 }
@@ -143,28 +150,19 @@ function persist() {
   if (mode === 'demo') localStorage.setItem('ar-demo-v1', JSON.stringify(state));
 }
 async function api(path, method = 'GET', body) {
-  const r = await fetch(`${apiBase}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Telegram-Init-Data': tg?.initData || '',
-      'Accept-Language': getLanguage()
-    },
-    ...(body ? {
-      body: JSON.stringify(body)
-    } : {})
-  });
-  let data;
   try {
-    data = await r.json();
-  } catch {
+    return await requestJSON(apiBase, path, {method, body, initData: tg?.initData || '', language: getLanguage()});
+  } catch (error) {
+    if (error.status) throw error;
     throw Error(tr("API ulanmagan. Sozlamalarda API manzilini kiriting."));
   }
-  if (!r.ok) throw Error(typeof data.detail === 'string' ? data.detail : tr("So‘rov bajarilmadi. Ma’lumotlarni tekshiring."));
-  return data;
 }
 async function loadLive() {
-  state = await api('/api/bootstrap');
+  const request = ++connectionRequest;
+  const loaded = await api('/api/bootstrap');
+  if (request !== connectionRequest) return;
+  state = loaded;
+  summaryRequest++;
   // An explicit Web App choice wins; otherwise start in the bot's saved language.
   const initialLanguage = normalizeLanguage(localStorage.getItem('ar-language')) || normalizeLanguage(state.language);
   if (initialLanguage) setLanguage(initialLanguage);
@@ -364,6 +362,11 @@ function help() {
   return head(tr("Boshlash oson"), tr("AutoReplyer’ni Telegram Business hisobingizga ulang.")) + `<div class="form-grid"><section class="card"><h2>${tr("Uch qadamda tayyor")}</h2>${[[tr("Botni ishga tushiring"), tr("@autoreplyer_dbot’ni ochib /start yuboring. Tilni tanlab boshlang.")], [tr("Telegram Business orqali ulang"), tr("Telegram Sozlamalar → Telegram Business → Chatbotlar bo‘limida @autoreplyer_dbot’ni tanlang. Xabarlarga javob berish ruxsatini yoqing.")], [tr("Avtojavobni yoqing va sinang"), tr("Offline rejimini yoqing. Boshqa Telegram hisobidan sizga xabar yuborib, haqiqiy javobni tekshiring.")]].map(([t, p], i) => `<div class="help-step"><span class="step-number">${i + 1}</span><div><h3>${t}</h3><p>${p}</p></div></div>`).join('')}<a class="button primary" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Telegram’da boshlash ↗")}</a></section><section class="card"><h2>${tr("Foydali havolalar")}</h2>${featureRow('message', tr("Yordam va takliflar"), tr("Botning yordam bo‘limi"), `<a class="button small" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Ochish ↗")}</a>`)}${featureRow('sparkles', tr("Yangiliklar"), tr("AutoReplyer yangilanishlari"), `<a class="button small" href="https://t.me/AutoReplyer_News" target="_blank" rel="noopener">${tr("Ochish ↗")}</a>`)}${featureRow('book', tr("Loyiha hujjatlari"), tr("GitHub’dagi qo‘llanma"), `<a class="button small" href="https://github.com/TheBigChanges/AutoReplyer" target="_blank" rel="noopener">GitHub ↗</a>`)}<p class="note" style="margin-top:22px">${tr("Bu Web App alohida loyiha. Mavjud AutoReplyer kodi o‘zgartirilmagan.")}</p></section></div>`;
 }
 function render() {
+  const route = location.hash.slice(1) || 'dashboard';
+  const key = `${route}:${mode}:${state.user.id}`;
+  const drafts = renderedKey === key ? captureDrafts() : [];
+  const busyForms = renderedKey === key ? [...document.querySelectorAll('#main form')].filter(form => pendingForms.has(form)) : [];
+  renderedKey = key;
   translateChrome();
   document.querySelector('#language-control').innerHTML = languageSelector('header-language');
   days = weekDays();
@@ -383,6 +386,10 @@ function render() {
   const banner = document.querySelector('#mode-banner');
   banner.classList.toggle('live', mode === 'live');
   banner.innerHTML = mode === 'live' ? `<span>${icon('shield')}<strong>${tr("Telegram orqali tasdiqlangan")}</strong><span class="demo-note">${tr("— o‘zgarishlar bot hisobingizga saqlanadi.")}</span></span><a href="#settings">${tr("Hisob ↗")}</a>` : mode === 'error' ? `<span>${icon('shield')}<strong>${tr("Botga ulanish talab etiladi")}</strong></span><a href="#settings">${tr("Ulanishni sozlash ↗")}</a>` : `<span>${icon('flask')}<strong>${tr("Demo rejim")}</strong><span class="demo-note">${tr("— namunaviy ma’lumotlar. O‘zgarishlar faqat shu qurilmada saqlanadi.")}</span></span><a href="#settings">${tr("Botni ulash ↗")}</a>`;
+  if (mode === 'loading') {
+    document.querySelector('#main').innerHTML = `<div class="empty">${tr("Telegram hisobingiz tekshirilmoqda…")}</div>`;
+    return;
+  }
   if (mode === 'error' && page !== 'settings' && page !== 'help') {
     document.querySelector('#main').innerHTML = head(tr("Hisobga ulanish"), tr("Haqiqiy sozlamalarni ochish uchun API bilan ulaning.")) + `<section class="card empty">${icon('shield')}<h3>${tr("API bilan aloqa o‘rnatilmadi")}</h3><p>${tr("API manzilini sozlang yoki demo rejimini tanlab ilovani ko‘rib chiqing.")}</p><div class="button-group" style="justify-content:center"><a class="button primary" href="#settings">${tr("Ulanishni sozlash")}</a>${button(tr("Demoni ochish"), 'enter-demo', 'flask')}</div></section>`;
     animatePage(document.querySelector('#main'), `${page}:${getLanguage()}:error`);
@@ -404,8 +411,31 @@ function render() {
     help
   }[page]();
   if (page === 'settings') document.querySelector('#main').insertAdjacentHTML('beforeend', `<section class="card mobile-sections" style="margin-top:20px"><h2>${tr("Barcha bo‘limlar")}</h2><div class="quick-grid">${[...navigation, ['plans', 'crown', tr("Tariflar")], ['help', 'help', tr("Yordam markazi")]].filter(n => n[0] !== 'settings').map(([key, ic, t]) => `<a class="quick-item" href="#${key}"><span class="quick-icon">${icon(ic)}</span><strong>${t}</strong><span>↗</span></a>`).join('')}</div></section>`);
+  for (const form of busyForms) document.getElementById(form.id)?.replaceWith(form);
+  restoreDrafts(drafts);
   paintIcons();
   animatePage(document.querySelector('#main'), `${page}:${getLanguage()}`);
+}
+function captureDrafts() {
+  return [...document.querySelectorAll('#main form [name]')].map(el => ({
+    form: el.form.id, name: el.name, value: el.value, checked: el.checked, type: el.type,
+    focused: document.activeElement === el, start: el.selectionStart, end: el.selectionEnd
+  }));
+}
+function restoreDrafts(drafts) {
+  for (const draft of drafts) {
+    const form = document.getElementById(draft.form);
+    const field = [...(form?.elements || [])].find(el => el.name === draft.name && (!['radio', 'checkbox'].includes(draft.type) || el.value === draft.value));
+    if (!field) continue;
+    if (['radio', 'checkbox'].includes(draft.type)) field.checked = draft.checked; else field.value = draft.value;
+    if (draft.focused) {
+      field.focus({preventScroll: true});
+      if (typeof draft.start === 'number' && typeof field.setSelectionRange === 'function') field.setSelectionRange(draft.start, draft.end);
+    }
+  }
+  const preview = document.querySelector('#reply-preview');
+  const editor = document.querySelector('[data-preview]');
+  if (preview && editor) preview.textContent = editor.value;
 }
 function modal(content) {
   document.querySelector('#modal-content').innerHTML = content;
@@ -442,6 +472,7 @@ document.addEventListener('click', async event => {
   const el = event.target.closest('[data-action],[data-period]');
   if (!el) return;
   const action = el.dataset.action;
+  let busy = false;
   try {
     if (el.dataset.period) {
       const value = Number(el.dataset.period);
@@ -466,6 +497,8 @@ document.addEventListener('click', async event => {
       return;
     }
     if (action === 'enter-demo') {
+      connectionRequest++;
+      summaryRequest++;
       mode = 'demo';
       state = structuredClone(seed);
       render();
@@ -484,6 +517,7 @@ document.addEventListener('click', async event => {
       return;
     }
     if (action?.startsWith('add-')) {
+      if (!['demo', 'live'].includes(mode)) return;
       editor(action.slice(4));
       return;
     }
@@ -498,45 +532,39 @@ document.addEventListener('click', async event => {
       return;
     }
     if (action?.startsWith('confirm-delete:')) {
+      if (el.disabled) return;
+      busy = true;
+      el.disabled = true;
+      el.setAttribute('aria-busy', 'true');
       const [, kind, id] = action.split(':');
       if (mode === 'live') await api(`/api/${kind}/${id}`, 'DELETE');
       const key = kind === 'schedule' ? 'schedules' : kind;
       state[key] = state[key].filter(r => r.id !== Number(id));
       persist();
-      await closeDialog(document.querySelector('#modal'));
+      if (el.isConnected) await closeDialog(document.querySelector('#modal'));
       render();
       toast(tr("Yozuv o‘chirildi"));
     }
   } catch (err) {
     toast(err.message);
+  } finally {
+    if (busy) {
+      el.disabled = false;
+      el.removeAttribute('aria-busy');
+    }
   }
 });
 async function changeLanguage(value) {
   if (!normalizeLanguage(value) || value === getLanguage()) return;
   // Preserve unsaved text while rebuilding labels in the chosen language.
-  const drafts = [...document.querySelectorAll('#main form [name]')].map(el => ({
-    form: el.form.id,
-    name: el.name,
-    value: el.value,
-    checked: el.checked,
-    type: el.type
-  }));
   setLanguage(value, true);
   render();
-  for (const draft of drafts) {
-    const form = document.getElementById(draft.form);
-    const field = [...(form?.elements || [])].find(el => el.name === draft.name && (!['radio', 'checkbox'].includes(draft.type) || el.value === draft.value));
-    if (!field) continue;
-    if (['radio', 'checkbox'].includes(draft.type)) field.checked = draft.checked;else field.value = draft.value;
-  }
-  const preview = document.querySelector('#reply-preview');
-  const editor = document.querySelector('[data-preview]');
-  if (preview && editor) preview.textContent = editor.value;
   toast(tr('Til saqlandi'));
 }
 document.addEventListener('change', async event => {
   const el = event.target;
   if (!el.dataset.setting && !el.dataset.toggle) return;
+  if (!['demo', 'live'].includes(mode)) return;
   el.disabled = true;
   try {
     if (el.dataset.setting) await saveSettings({
@@ -544,8 +572,8 @@ document.addEventListener('change', async event => {
     });else {
       const [kind, id] = el.dataset.toggle.split(':');
       const key = kind === 'schedule' ? 'schedules' : kind;
-      if (mode === 'live') await api(`/api/${kind}/${id}/toggle`, 'POST');
-      state[key].find(r => r.id === Number(id)).is_enabled = el.checked;
+      const result = mode === 'live' ? await api(`/api/${kind}/${id}/toggle`, 'POST') : null;
+      state[key].find(r => r.id === Number(id)).is_enabled = result?.is_enabled ?? el.checked;
       persist();
     }
     render();
@@ -576,14 +604,19 @@ document.addEventListener('submit', async event => {
   const form = event.target;
   if (!['settings-form', 'entry-form', 'connection-form', 'test-form'].includes(form.id)) return;
   event.preventDefault();
+  if (pendingForms.has(form)) return;
+  if (form.id !== 'connection-form' && !['demo', 'live'].includes(mode)) return;
+  pendingForms.add(form);
+  const submittedLanguage = getLanguage();
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;
   submit.setAttribute('aria-busy', 'true');
   try {
     const data = new FormData(form);
     if (form.id === 'connection-form') {
-      const value = String(data.get('api')).replace(/\/$/, '');
-      if (value && new URL(value).protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(new URL(value).hostname)) throw Error(tr("API manzili HTTPS bo‘lishi kerak."));
+      let value;
+      try { value = await trustedApiBase(data.get('api')); }
+      catch { throw Error(tr("API manzili ishonchli ro‘yxatda yo‘q. Administrator bilan bog‘laning.")); }
       apiBase = value;
       localStorage.setItem('ar-api', value);
       if (!tg?.initData) {
@@ -619,7 +652,7 @@ document.addEventListener('submit', async event => {
           text: found?.answer || state.settings.auto_reply_text
         };
       }
-      document.querySelector('#test-result').innerHTML = `<span class="badge">${e(result.source)}</span><p class="chat-bubble" style="margin-top:12px">${e(result.text)}</p>`;
+      if (form.isConnected) form.nextElementSibling.innerHTML = `<span class="badge">${e(result.source)}</span><p class="chat-bubble" style="margin-top:12px">${e(result.text)}</p>`;
       return;
     }
     if (form.id === 'entry-form') {
@@ -674,7 +707,7 @@ document.addEventListener('submit', async event => {
         });
       }
       persist();
-      await closeDialog(document.querySelector('#modal'));
+      if (form.isConnected) await closeDialog(document.querySelector('#modal'));
       render();
       toast(tr("Saqlandi"));
     }
@@ -682,12 +715,16 @@ document.addEventListener('submit', async event => {
     const error = form.querySelector('#form-error');
     if (error) error.textContent = err.message;else toast(err.message);
   } finally {
+    pendingForms.delete(form);
     submit.disabled = false;
     submit.removeAttribute('aria-busy');
+    if (form.isConnected && submittedLanguage !== getLanguage()) render();
   }
 });
 async function refreshSummary(value = period) {
+  const request = ++summaryRequest;
   const s = await api(`/api/analytics?days=${value}`);
+  if (request !== summaryRequest || mode !== 'live') return;
   period = value;
   summary = s;
   render();
@@ -727,7 +764,9 @@ document.title = `AutoReplyer — ${tr('Boshqaruv paneli')}`;
 if (tg?.initData) {
   mode = 'loading';
   document.querySelector('#main').innerHTML = `<div class="empty">${tr("Telegram hisobingiz tekshirilmoqda…")}</div>`;
-  loadLive().then(() => refreshSummary(1)).catch(() => {
+  loadLive().then(() => {
+    if (mode === 'live') refreshSummary(1).catch(err => toast(err.message));
+  }).catch(() => {
     mode = 'error';
     state = structuredClone(seed);
     render();

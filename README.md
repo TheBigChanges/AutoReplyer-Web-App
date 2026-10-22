@@ -15,6 +15,7 @@ Checks:
 ```sh
 python -m unittest discover -s tests -p 'test_*.py'
 node tests/test_i18n.mjs
+node tests/test_api_client.mjs
 ```
 
 Browser checks require Playwright and installed Google Chrome. Start a static
@@ -26,3 +27,16 @@ outside dismissal. `dist/interactions.js` adds brief page entrances, chart
 reveals, press feedback, modal transitions and save indicators. Animations honor
 the device's reduced-motion preference. Run `tests/browser_interactions.py` to
 check focus, rapid navigation, menu bounds, save feedback and reduced motion.
+
+Security and regression audit: [AUDIT.md](AUDIT.md). Run
+`tests/browser_audit.py` against the FastAPI server to check drafts, request races,
+escaped content and credential routing with the production CSP enabled.
+
+API trust policy is deployment-owned in `dist/config.json`. The default
+`{"apiOrigins": []}` allows the same-origin API. If the API is hosted separately,
+add its exact HTTPS origin (for example `https://api.example.com`) before deploying
+the frontend and restarting the service. Keep `WEBAPP_ORIGINS` on the API set to
+the frontend's exact HTTPS origin. A URL typed into Settings or saved by an older
+version cannot add a trusted origin. Clear an obsolete Settings API address to
+use the same-origin service. API redirects are rejected rather than forwarding
+Telegram's signed session to another destination.

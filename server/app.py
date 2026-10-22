@@ -6,6 +6,7 @@ BOT_TOKEN and DATABASE_URL stay on the server. No schema migrations are run.
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 import os
 import sys
@@ -14,10 +15,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Path as PathParameter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
@@ -27,13 +29,20 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.auth import validate_init_data
 from server.i18n import translate
+from server.security import RequestBodyLimit, valid_origin
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
-app = FastAPI(title='AutoReplyer Web App API', docs_url=None, redoc_url=None)
+app = FastAPI(title='AutoReplyer Web App API', docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(RequestBodyLimit)
+DIST = Path(__file__).resolve().parents[1] / 'dist'
+api_origins = json.loads((DIST / 'config.json').read_text())['apiOrigins']
+# Origin tokens are deployment configuration, never request-header content.
+if not isinstance(api_origins, list) or not all(valid_origin(origin) for origin in api_origins):
+    raise RuntimeError('config.json apiOrigins must contain explicit HTTPS origins.')
 origins = [v.strip() for v in os.getenv('WEBAPP_ORIGINS', '').split(',') if v.strip()]
 if origins:
-    if '*' in origins:
-        raise RuntimeError('WEBAPP_ORIGINS requires explicit HTTPS origins, not *.')
+    if not all(valid_origin(origin, local_http=True) for origin in origins):
+        raise RuntimeError('WEBAPP_ORIGINS requires explicit HTTPS origins (HTTP only for loopback development).')
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST', 'PATCH', 'DELETE'], allow_headers=['Content-Type', 'X-Telegram-Init-Data', 'Accept-Language'])
 
 
@@ -70,7 +79,7 @@ class Input(BaseModel):
 
 class Settings(Input):
     offline: StrictBool | None = None
-    cooldown_hours: float | None = Field(None, ge=1 / 60, le=8760, allow_inf_nan=False)
+    cooldown_hours: float | None = Field(None, ge=1 / 60, le=8760, allow_inf_nan=False, strict=True)
     auto_reply_text: str | None = Field(None, min_length=1, max_length=500)
     sleep_mode_enabled: StrictBool | None = None
     sleep_start_minutes: int | None = Field(None, ge=0, le=1439, strict=True)
@@ -163,19 +172,28 @@ def identity(x_telegram_init_data: Annotated[str, Header()] = ''):
 
 
 User = Annotated[dict, Depends(identity)]
+EntryId = Annotated[int, PathParameter(ge=1, le=2147483647)]
 
 
 def plan(uid):
     db, _, _ = modules()
-    return 'ultra' if str(uid) == os.getenv('ADMIN_ID') else db.get_user_plan(uid)
+    value = 'ultra' if str(uid) == os.getenv('ADMIN_ID') else db.get_user_plan(uid)
+    return value if value in ('free', 'plus', 'pro', 'ultra') else 'free'
 
 
 def require(uid, feature):
     p = plan(uid)
     allowed = {'custom': ['plus', 'pro', 'ultra'], 'faq': ['plus', 'pro', 'ultra'], 'knowledge': ['ultra'], 'ai': ['ultra'], '7': ['plus', 'pro', 'ultra'], '30': ['pro', 'ultra']}
-    if p not in allowed.get(feature, [p]):
+    if p not in allowed.get(feature, ()):
         raise HTTPException(403, 'Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.')
     return p
+
+
+def user_zone(settings):
+    try:
+        return ZoneInfo(settings.get('name_clock_tz') or 'Asia/Tashkent')
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return ZoneInfo('Asia/Tashkent')
 
 
 @app.middleware('http')
@@ -183,8 +201,19 @@ async def response_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; script-src 'self' https://telegram.org; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+        "connect-src 'self' " + ' '.join(api_origins) + "; "
+        "object-src 'none'; base-uri 'none'; form-action 'self'; "
+        "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
+    )
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
+    elif request.url.path == '/' or request.url.path.endswith(('.html', '.js', '.css', '.json')):
+        response.headers['Cache-Control'] = 'no-cache'
     return response
 
 
@@ -202,7 +231,7 @@ def bootstrap(user: User):
     # get_connection uses a RealDictCursor in the current upstream version.
     if connection and not isinstance(connection, dict):
         raise HTTPException(503, 'AutoReplyer kodi versiyasi mos emas.')
-    zone = ZoneInfo(settings.get('name_clock_tz') or 'Asia/Tashkent')
+    zone = user_zone(settings)
     bot_language = db.get_user_lang(uid)
     return {'user': {'id': uid, 'first_name': user.get('first_name', 'Foydalanuvchi')},
             'language': bot_language if bot_language in ('uz', 'ru', 'en') else user.get('language_code', 'uz'),
@@ -257,7 +286,7 @@ def create_faq(body: FAQ, user: User):
 
 
 @app.patch('/api/faq/{entry_id}')
-def edit_faq(entry_id: int, body: FAQ, user: User):
+def edit_faq(entry_id: EntryId, body: FAQ, user: User):
     return save_item('faq', body, user, entry_id)
 
 
@@ -267,7 +296,7 @@ def create_knowledge(body: Knowledge, user: User):
 
 
 @app.patch('/api/knowledge/{entry_id}')
-def edit_knowledge(entry_id: int, body: Knowledge, user: User):
+def edit_knowledge(entry_id: EntryId, body: Knowledge, user: User):
     return save_item('knowledge', body, user, entry_id)
 
 
@@ -298,21 +327,22 @@ def create_schedule(body: Schedule, user: User):
 
 
 @app.patch('/api/schedule/{entry_id}')
-def edit_schedule(entry_id: int, body: Schedule, user: User):
+def edit_schedule(entry_id: EntryId, body: Schedule, user: User):
     db, _, _ = modules()
     check_schedule(body, user)
     return schedule_result(db.update_schedule_rule(user['id'], entry_id, **body.model_dump()))
 
 
 @app.post('/api/{kind}/{entry_id}/toggle')
-def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: int, user: User):
+def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: EntryId, user: User):
     db, _, _ = modules()
     uid = user['id']
     if kind == 'schedule':
         rule = db.get_schedule_rule(uid, entry_id)
         if not rule:
             raise HTTPException(404, 'Jadval topilmadi.')
-        return schedule_result(db.update_schedule_rule(uid, entry_id, is_enabled=not rule['is_enabled']))
+        result = schedule_result(db.update_schedule_rule(uid, entry_id, is_enabled=not rule['is_enabled']))
+        return {**result, 'is_enabled': not rule['is_enabled']}
     item_limit(uid, kind)
     result = getattr(db, f'toggle_{item_prefix(kind)}_entry')(uid, entry_id)
     if result is None:
@@ -321,7 +351,7 @@ def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: int, user: U
 
 
 @app.delete('/api/{kind}/{entry_id}')
-def delete(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: int, user: User):
+def delete(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: EntryId, user: User):
     db, _, _ = modules()
     # Allow owners to delete their saved data even after a plan downgrade.
     fn = db.delete_schedule_rule if kind == 'schedule' else getattr(db, f'delete_{item_prefix(kind)}_entry')
@@ -339,7 +369,7 @@ def analytics(user: User, days: int = Query(1)):
         require(uid, str(days))
     db, _, reports = modules()
     settings = db.get_settings(uid)
-    zone = ZoneInfo(settings.get('name_clock_tz') or 'Asia/Tashkent')
+    zone = user_zone(settings)
     start = reports.period_start(days, zone).timestamp()
     summary = reports.summarize(db.get_analytics_rows(uid, start), days, zone)
     if days == 1:
@@ -347,7 +377,8 @@ def analytics(user: User, days: int = Query(1)):
     else:
         series = {'inc': [r[1] for r in summary['daily']], 'sent': [r[2] for r in summary['daily']], 'labels': [r[0].strftime('%d.%m') for r in summary['daily']]}
     p = plan(uid)
-    return {'incoming': summary['incoming'], 'sent': summary['sent'], 'kinds': summary['kinds'], 'peak': summary['peak'], 'skipped': summary['skipped'] if p == 'ultra' else None, 'series': series if p != 'free' else None}
+    kinds = {key: summary['kinds'][key] for key in ('ai', 'faq', 'static', 'sleep')} if p in ('pro', 'ultra') else {'ai': summary['kinds']['ai']}
+    return {'incoming': summary['incoming'], 'sent': summary['sent'], 'kinds': kinds, 'peak': summary['peak'], 'skipped': summary['skipped'] if p == 'ultra' else None, 'series': series if p != 'free' else None}
 
 
 @app.post('/api/test')
@@ -355,12 +386,13 @@ def test_reply(body: TestMessage, user: User, request: Request):
     db, logic, _ = modules()
     uid = user['id']
     settings = db.get_settings(uid)
-    entries = db.get_enabled_faq_entries(uid) if settings.get('faq_enabled') and plan(uid) in ['plus', 'pro', 'ultra'] else []
+    limit = {'plus': 15, 'pro': 30, 'ultra': 65}.get(plan(uid), 0)
+    entries = db.get_enabled_faq_entries(uid)[:limit] if settings.get('faq_enabled') and limit else []
     match = logic.match_faq(body.message, entries)
     # Preview only: does not consume AI quota or send Telegram messages.
     return {'source': 'Smart FAQ' if match else translate('Oddiy javob', request.headers.get('accept-language')),
             'text': match['answer'] if match else settings.get('auto_reply_text') or db.DEFAULT_AUTO_REPLY_TEXT}
 
 
-app.mount('/', StaticFiles(directory=Path(__file__).resolve().parents[1] / 'dist', html=True), name='webapp')
+app.mount('/', StaticFiles(directory=DIST, html=True), name='webapp')
 
