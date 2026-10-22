@@ -1,5 +1,5 @@
 import { tr, getLanguage, getLocale, setLanguage, normalizeLanguage, weekDays, translateChrome, languageSelector } from './i18n.js';
-import {animatePage, animateNotice, showDialog, closeDialog, initInteractions} from './interactions.js';
+import {animatePage, animateNotice, showDialog, closeDialog, initInteractions, updateMobileNavigation} from './interactions.js';
 const paths = {
   reply: 'M9 10V4L2 11l7 7v-6h5c4 0 6 3 6 7 3-9-1-13-11-13',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -379,7 +379,7 @@ function render() {
   document.querySelector('#account-label').textContent = mode === 'live' ? `${state.user.first_name} · ${state.plan.toUpperCase()}` : tr("Namoyish hisobi");
   document.querySelector('.top-actions .avatar').textContent = state.user.first_name[0];
   document.querySelector('#navigation').innerHTML = navigation.map(([key, ic, t, b], i) => `${i === 8 ? `<div class="nav-divider"></div>` : ''}<a href="#${key}" class="${page === key ? 'active' : ''}" ${page === key ? 'aria-current="page"' : ''}>${icon(ic)}${t}${b ? `<span class="nav-badge">${b}</span>` : ''}</a>`).join('');
-  document.querySelector('#mobile-nav').innerHTML = [navigation[0], navigation[1], navigation[5], navigation[6], navigation[9]].map(([key, ic, t]) => `<a href="#${key}" class="${page === key ? 'active' : ''}">${icon(ic)}${key === 'dashboard' ? tr("Asosiy") : key === 'scheduler' ? tr("Jadval") : t}</a>`).join('');
+  updateMobileNavigation(document.querySelector('#mobile-nav'), [navigation[0], navigation[1], navigation[5], navigation[6], navigation[9]].map(([key, ic, t]) => `<a href="#${key}" class="${page === key ? 'active' : ''}">${icon(ic)}<span class="mobile-nav-label">${key === 'dashboard' ? tr("Asosiy") : key === 'scheduler' ? tr("Jadval") : t}</span></a>`).join(''));
   const banner = document.querySelector('#mode-banner');
   banner.classList.toggle('live', mode === 'live');
   banner.innerHTML = mode === 'live' ? `<span>${icon('shield')}<strong>${tr("Telegram orqali tasdiqlangan")}</strong><span class="demo-note">${tr("— o‘zgarishlar bot hisobingizga saqlanadi.")}</span></span><a href="#settings">${tr("Hisob ↗")}</a>` : mode === 'error' ? `<span>${icon('shield')}<strong>${tr("Botga ulanish talab etiladi")}</strong></span><a href="#settings">${tr("Ulanishni sozlash ↗")}</a>` : `<span>${icon('flask')}<strong>${tr("Demo rejim")}</strong><span class="demo-note">${tr("— namunaviy ma’lumotlar. O‘zgarishlar faqat shu qurilmada saqlanadi.")}</span></span><a href="#settings">${tr("Botni ulash ↗")}</a>`;

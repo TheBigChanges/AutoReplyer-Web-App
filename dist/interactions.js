@@ -4,6 +4,7 @@ const running = new Set();
 const pageAnimations = new Set();
 const closingDialogs = new WeakMap();
 const menuAnimations = new WeakMap();
+const mobileNavigations = new WeakMap();
 const ease = 'cubic-bezier(.2,.75,.25,1)';
 let previousPage;
 
@@ -44,6 +45,82 @@ export function animatePage(main, pageKey) {
     ], {duration: 550, delay: 90});
     if (animation) pageAnimations.add(animation);
   }
+}
+
+function positionMobileIndicator(nav, state, allowMotion = false) {
+  if (!nav.getClientRects().length) {
+    state.visible = false;
+    state.indicator.hidden = true;
+    state.animation?.cancel();
+    return;
+  }
+  if (!state.visible) {
+    state.visible = true;
+    animate(nav, [
+      {opacity: 0, transform: 'translate(-50%, 12px)'},
+      {opacity: 1, transform: 'translate(-50%, 0)'}
+    ], {duration: 300});
+  }
+  const active = nav.querySelector('a.active');
+  const indicator = state.indicator;
+  if (!active) {
+    indicator.hidden = true;
+    state.animation?.cancel();
+    state.key = null;
+    return;
+  }
+  const container = nav.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  const previous = indicator.hidden ? null : indicator.getBoundingClientRect();
+  const x = rect.left - container.left - nav.clientLeft;
+  const y = active.offsetTop;
+  const width = active.offsetWidth;
+  const height = active.offsetHeight;
+  state.animation?.cancel();
+  indicator.hidden = false;
+  Object.assign(indicator.style, {transform: `translate(${x}px, ${y}px)`, width: `${width}px`, height: `${height}px`});
+  if (allowMotion && previous && state.key !== active.hash) {
+    state.animation = animate(indicator, [
+      {transform: `translate(${previous.left - container.left - nav.clientLeft}px, ${y}px)`, width: `${previous.width}px`},
+      {transform: `translate(${x}px, ${y}px)`, width: `${width}px`}
+    ], {duration: 300});
+  }
+  state.key = active.hash;
+}
+
+export function updateMobileNavigation(nav, markup) {
+  let state = mobileNavigations.get(nav);
+  if (!state) {
+    const indicator = document.createElement('span');
+    indicator.className = 'mobile-nav-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    indicator.hidden = true;
+    nav.prepend(indicator);
+    state = {indicator, visible: false, key: null, animation: null};
+    mobileNavigations.set(nav, state);
+    if (window.ResizeObserver) {
+      state.observer = new ResizeObserver(() => positionMobileIndicator(nav, state));
+      state.observer.observe(nav);
+    } else window.addEventListener('resize', () => positionMobileIndicator(nav, state));
+  }
+  const template = document.createElement('template');
+  template.innerHTML = markup;
+  const existing = new Map([...nav.querySelectorAll('a')].map(link => [link.hash, link]));
+  const retained = new Set();
+  let index = 1;
+  for (const next of template.content.querySelectorAll('a')) {
+    const link = existing.get(next.hash) || next;
+    // Keep nodes, focus and a running press effect during route/data updates.
+    if (link.textContent !== next.textContent) link.innerHTML = next.innerHTML;
+    link.classList.toggle('active', next.classList.contains('active'));
+    if (next.classList.contains('active')) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+    retained.add(link.hash);
+    if (nav.children[index] !== link) nav.insertBefore(link, nav.children[index] || null);
+    index++;
+  }
+  for (const [key, link] of existing) if (!retained.has(key)) link.remove();
+  positionMobileIndicator(nav, state, true);
 }
 
 export function showDialog(dialog) {
@@ -132,7 +209,7 @@ export function initInteractions({changeLanguage, reportError}) {
   document.addEventListener('pointerdown', event => {
     if (!event.target.closest('[data-language-switcher]')) closeLanguageMenus();
     if (event.button !== 0 || reducedMotion.matches) return;
-    const target = event.target.closest('.button,.icon-button,.quick-item,.language-trigger,.language-option');
+    const target = event.target.closest('.button,.icon-button,.quick-item,.language-trigger,.language-option,.mobile-nav a');
     if (!target || target.disabled) return;
     const bounds = target.getBoundingClientRect();
     const wave = document.createElement('span');
