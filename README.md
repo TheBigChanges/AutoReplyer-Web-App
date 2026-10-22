@@ -55,3 +55,15 @@ the frontend's exact HTTPS origin. A URL typed into Settings or saved by an olde
 version cannot add a trusted origin. Clear an obsolete Settings API address to
 use the same-origin service. API redirects are rejected rather than forwarding
 Telegram's signed session to another destination.
+
+
+The premium visual system is in `dist/premium.css`, loaded after the base styles.
+Warm porcelain surfaces, an evergreen sidebar, champagne accents and a decorative
+brand orbit carry through dashboard, forms, lists, plans and dialogs. Both themes
+share responsive spacing and typography. Theme changes also update Telegram's
+header/background and the browser theme color. Pricing and plan permissions are
+unchanged. No build step or new dependency is required.
+
+`tests/browser_design.py` checks all 12 sections in three languages, two themes
+and four widths, including control bounds, core text contrast, dialog bounds and
+native chrome colors. It writes local review screenshots to ignored `artifacts/`.

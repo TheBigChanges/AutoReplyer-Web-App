@@ -289,7 +289,7 @@ function donut(s) {
 function dashboard() {
   return head(`${tr("Salom, {0}", {
     0: e(state.user.first_name)
-  })} <span style="font-size:24px">☀️</span>`, tr("Sizning vaqtingiz qadrli. Muloqotlaringiz esa ishonchli qo‘llarda."), `<div class="button-group"><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botni ochish")}</a>${button(tr("Javobni sinash"), 'test', 'send', 'primary')}</div>`) + `<section class="welcome-card"><div><div class="welcome-label"><i></i> ${tr("SIZNING SHAXSIY YORDAMCHINGIZ")}</div><h2>${tr("Siz band bo‘lsangiz ham, aloqada qoling.")}</h2><p>${tr("Avtojavoblar, aqlli yordamchi va rejalashtirilgan xabarlar.")}<br>${tr("Mijozlaringizning hech bir murojaati e’tiborsiz qolmasin.")}</p><a href="#replies">${tr("Avtojavobni sozlash")} ${icon('arrow')}</a></div><div class="status-control"><div><strong>${tr("Avtojavob {0}", {
+  })} <span class="greeting-mark" aria-hidden="true">✦</span>`, tr("Sizning vaqtingiz qadrli. Muloqotlaringiz esa ishonchli qo‘llarda."), `<div class="button-group"><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botni ochish")}</a>${button(tr("Javobni sinash"), 'test', 'send', 'primary')}</div>`) + `<section class="welcome-card"><div class="welcome-art" aria-hidden="true"><span class="orbit orbit-outer"></span><span class="orbit orbit-inner"></span><span class="orbit-core">${icon('reply')}</span><span class="orbit-node orbit-node-one">${icon('message')}</span><span class="orbit-node orbit-node-two">${icon('sparkles')}</span><span class="orbit-node orbit-node-three">${icon('calendar')}</span><span class="orbit-spark"></span></div><div class="welcome-copy"><div class="welcome-label"><i></i> ${tr("SIZNING SHAXSIY YORDAMCHINGIZ")}</div><h2>${tr("Siz band bo‘lsangiz ham, aloqada qoling.")}</h2><p>${tr("Avtojavoblar, aqlli yordamchi va rejalashtirilgan xabarlar.")}<br>${tr("Mijozlaringizning hech bir murojaati e’tiborsiz qolmasin.")}</p><a href="#replies">${tr("Avtojavobni sozlash")} ${icon('arrow')}</a></div><div class="status-control"><div><strong>${tr("Avtojavob {0}", {
     0: state.settings.offline ? tr("yoqilgan") : tr("o‘chirilgan")
   })}</strong><small>${state.settings.offline ? tr("Offline holatda javob beradi") : tr("Online — oddiy avtojavob yo‘q")}</small></div>${switchControl('offline', tr("Avtojavobni yoqish"))}</div></section><section class="stats">${stat(tr("Kelgan xabarlar"), num(summary.incoming), 'inbox', `<span class="positive">↗ ${period === 1 ? tr("Bugun") : `${tr("So‘nggi {0} kun", {
     0: period
@@ -760,12 +760,21 @@ async function refreshSummary(value = period) {
   summary = s;
   render();
 }
+function syncChromeTheme() {
+  const style = getComputedStyle(document.documentElement);
+  const background = style.getPropertyValue('--bg').trim();
+  const surface = style.getPropertyValue('--surface').trim();
+  document.querySelector('meta[name="theme-color"]').content = background;
+  tg?.setHeaderColor?.(surface);
+  tg?.setBackgroundColor?.(background);
+}
 function theme() {
   const dark = document.documentElement.classList.toggle('dark');
   storage.setItem('ar-theme', dark ? 'dark' : 'light');
   const button = document.querySelector('#theme-button');
   button.dataset.icon = dark ? 'sun' : 'moon';
   button.innerHTML = icon(button.dataset.icon);
+  syncChromeTheme();
 }
 if (storage.getItem('ar-theme') === 'dark') document.documentElement.classList.add('dark');
 document.querySelector('#theme-button').dataset.icon = document.documentElement.classList.contains('dark') ? 'sun' : 'moon';
@@ -792,8 +801,7 @@ document.querySelector('#modal').addEventListener('cancel', event => {
 initInteractions({changeLanguage, reportError: toast});
 tg?.ready();
 tg?.expand();
-tg?.setHeaderColor?.('#f6f8f7');
-tg?.setBackgroundColor?.('#f6f8f7');
+syncChromeTheme();
 translateChrome();
 document.title = `AutoReplyer — ${tr('Boshqaruv paneli')}`;
 if (tg?.initData) {
