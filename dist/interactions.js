@@ -205,28 +205,37 @@ function openMenu(trigger, focus = 'selected') {
   target?.focus({preventScroll: true});
 }
 
+const pressTargets = 'button,.button,.quick-item,.mobile-nav a,#navigation a,.help-link,.avatar,.brand,.upgrade a';
+
+function pressFeedback(target, point) {
+  if (!target || target.matches(':disabled,[aria-disabled="true"],[aria-busy="true"]') || reducedMotion.matches) return;
+  const bounds = target.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return;
+  target.querySelectorAll(':scope > .tap-wave').forEach(wave => wave.remove());
+  const wave = document.createElement('span');
+  wave.className = 'tap-wave';
+  wave.setAttribute('aria-hidden', 'true');
+  const size = Math.max(bounds.width, bounds.height) * 2;
+  Object.assign(wave.style, {width: `${size}px`, height: `${size}px`, left: `${point ? point.clientX - bounds.left : bounds.width / 2}px`, top: `${point ? point.clientY - bounds.top : bounds.height / 2}px`});
+  target.classList.add('tap-target');
+  target.append(wave);
+  const animation = animate(wave, [
+    {opacity: .13, transform: 'translate(-50%,-50%) scale(0)'},
+    {opacity: 0, transform: 'translate(-50%,-50%) scale(1)'}
+  ], {duration: 400, easing: 'ease-out'});
+  if (animation) animation.finished.then(() => wave.remove(), () => wave.remove()); else wave.remove();
+}
+
 export function initInteractions({changeLanguage, reportError}) {
   document.addEventListener('pointerdown', event => {
     if (!event.target.closest('[data-language-switcher]')) closeLanguageMenus();
-    if (event.button !== 0 || reducedMotion.matches) return;
-    const target = event.target.closest('.button,.icon-button,.quick-item,.language-trigger,.language-option,.mobile-nav a');
-    if (!target || target.disabled) return;
-    const bounds = target.getBoundingClientRect();
-    const wave = document.createElement('span');
-    wave.className = 'tap-wave';
-    wave.setAttribute('aria-hidden', 'true');
-    const size = Math.max(bounds.width, bounds.height) * 2;
-    Object.assign(wave.style, {width: `${size}px`, height: `${size}px`, left: `${event.clientX - bounds.left}px`, top: `${event.clientY - bounds.top}px`});
-    target.classList.add('tap-target');
-    target.append(wave);
-    const animation = animate(wave, [
-      {opacity: .13, transform: 'translate(-50%,-50%) scale(0)'},
-      {opacity: 0, transform: 'translate(-50%,-50%) scale(1)'}
-    ], {duration: 400, easing: 'ease-out'});
-    if (animation) animation.finished.then(() => wave.remove(), () => wave.remove()); else wave.remove();
+    if (event.button !== 0 || !event.isPrimary) return;
+    pressFeedback(event.target.closest(pressTargets), event);
   });
 
   document.addEventListener('click', async event => {
+    // Keyboard and assistive activation get the same feedback, centered.
+    if (event.detail === 0) pressFeedback(event.target.closest(pressTargets));
     const trigger = event.target.closest('[data-language-trigger]');
     if (trigger) {
       if (trigger.getAttribute('aria-expanded') === 'true') closeMenu(trigger, true); else openMenu(trigger);

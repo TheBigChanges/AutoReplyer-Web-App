@@ -83,5 +83,53 @@ dialog[data-closing]::backdrop{animation:backdrop-out .13s ease-in both}
     .dark .mobile-nav{background:rgba(26,42,33,.82);border-color:rgba(153,188,165,.19)}
   }
 }
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}.button:active,.icon-button:active,.quick-item:hover,.quick-item:active,.stat:hover,.plan-card:hover,.language-trigger:active,.language-option:active,.day-picker label:active span,.role-option:active span,.mobile-nav a.active svg,.mobile-nav a:active svg{transform:none!important}}
+/* Consistent feedback for navigation, choices and actions. */
+button:not(:disabled),.avatar,.brand,.help-link,.upgrade a,#navigation a{transition:transform .18s cubic-bezier(.2,.75,.25,1),background-color .18s,border-color .18s,color .18s,box-shadow .18s}
+button:not(:disabled):not([aria-busy=true]):active,.avatar:active,.brand:active,.help-link:active,.upgrade a:active{transform:translateY(1px) scale(.97)}
+.button:disabled,.button[aria-busy=true]{transform:none;box-shadow:none}
+.button.danger{transition:transform .18s,background-color .18s,border-color .18s,box-shadow .18s}
+.button.danger:active{background:#bd626215;border-color:#bd626260}
+.button>svg,.icon-button>svg,.quick-icon,#navigation a>svg,.help-link>span:first-child{transition:transform .2s cubic-bezier(.2,.75,.25,1)}
+.button:not(:disabled):active>svg{transform:scale(.9)}
+#theme-button:active>svg,[data-action=theme]:active>svg{transform:rotate(30deg) scale(.9)}
+[data-action=close-modal]:active>svg{transform:rotate(90deg) scale(.9)}
+#navigation a{position:relative}
+#navigation a::before{content:'';position:absolute;left:0;top:25%;height:50%;width:3px;border-radius:3px;background:var(--green);opacity:0;transform:scaleY(.3);transition:opacity .18s,transform .24s cubic-bezier(.2,.75,.25,1)}
+#navigation a.active::before{opacity:1;transform:scaleY(1)}
+#navigation a.active>svg{transform:translateX(2px)}
+#navigation a:active{transform:scale(.98)}
+.segmented button{position:relative;min-width:0;transition:background-color .18s,color .18s,box-shadow .18s,transform .18s}
+.segmented button.active{animation:choice-in .2s cubic-bezier(.2,.75,.25,1)}
+.day-picker input:checked+span,.role-option input:checked+span{animation:choice-in .22s cubic-bezier(.2,.75,.25,1);box-shadow:0 2px 7px #21865e0a}
+.day-picker input:disabled+span,.role-option input:disabled+span{opacity:.5;cursor:default;transform:none;animation:none}
+.switch input:disabled+span{opacity:.5;cursor:default}
+.switch span:before{transition:transform .24s cubic-bezier(.2,.85,.3,1.15),box-shadow .18s}
+.field input,.field select,.field textarea,.search{transition:border-color .18s,box-shadow .18s,background-color .18s}
+.field input:focus,.field select:focus,.field textarea:focus,.search:focus{box-shadow:0 0 0 3px #79b49418}
+.green-link,.welcome-card a,.mode-banner a,.page-footer a{transition:color .18s,opacity .18s,text-decoration-color .18s;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px}
+.green-link:active,.welcome-card a:active,.mode-banner a:active,.page-footer a:active{opacity:.65}
+.dark .language-trigger{transition:background-color .18s,border-color .18s,color .18s,box-shadow .18s,transform .18s}
+@keyframes choice-in{from{transform:scale(.96)}to{transform:scale(1)}}
+@media(hover:hover) and (pointer:fine){
+  .button:not(:disabled):not([aria-busy=true]):hover{box-shadow:0 4px 12px #153d3212}
+  .button.primary:not(:disabled):not([aria-busy=true]):hover{box-shadow:0 5px 16px #153d3226}
+  .button.danger:not(:disabled):hover{background:#bd62620c;border-color:#bd626260;box-shadow:0 4px 12px #bd626212}
+  .segmented button:not(.active):hover{background:var(--surface);color:var(--green)}
+  .day-picker label:hover input:not(:disabled)+span,.role-option:hover input:not(:disabled)+span{border-color:#93bba0}
+  #navigation a:hover>svg,.help-link:hover>span:first-child{transform:translateX(2px)}
+  .quick-item:hover .quick-icon{transform:rotate(-4deg) scale(1.05)}
+  .avatar:hover{box-shadow:0 0 0 3px #79b49425}
+  .green-link:hover,.welcome-card a:hover,.mode-banner a:hover,.page-footer a:hover{text-decoration-color:currentColor}
+  .help-link:hover,.upgrade a:hover{color:var(--green)}
+}
+/* Glass belongs to floating layers; opaque defaults remain the fallback. */
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .language-menu,dialog{background:rgba(255,255,255,.91);-webkit-backdrop-filter:blur(22px) saturate(135%);backdrop-filter:blur(22px) saturate(135%);border-color:rgba(206,224,212,.8)}
+  .dark .language-menu,.dark dialog{background:rgba(30,44,37,.94);border-color:rgba(130,165,143,.25)}
+  dialog::backdrop{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  #toast{background:rgba(23,61,50,.9);-webkit-backdrop-filter:blur(16px) saturate(130%);backdrop-filter:blur(16px) saturate(130%);border:1px solid #ffffff1a}
+  .dark #toast{background:rgba(21,61,45,.93)}
+}
+@media(prefers-reduced-transparency:reduce){.language-menu,dialog,.mobile-nav{background:var(--surface)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}#toast{background:var(--deep)!important;-webkit-backdrop-filter:none;backdrop-filter:none}dialog::backdrop{-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}.button:active,.button:active>svg,.icon-button:active,.icon-button:active>svg,.quick-item:hover,.quick-item:active,.quick-item:hover .quick-icon,.stat:hover,.plan-card:hover,.language-trigger:active,.language-option:active,.day-picker label:active span,.role-option:active span,.mobile-nav a.active svg,.mobile-nav a:active svg,button:active,.avatar:active,.brand:active,.help-link:active,.upgrade a:active,#navigation a:active,#navigation a.active>svg,#navigation a:hover>svg,.help-link:hover>span:first-child{transform:none!important}}
 
