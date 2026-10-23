@@ -485,7 +485,7 @@ function overlap(a, b) {
   return segments(a).some(([s, e]) => segments(b).some(([x, y]) => s < y && x < e));
 }
 function testModal() {
-  modal(`${modalHead(tr("Javobni sinab ko‘ring"))}<p class="hint">${tr("Smart FAQ mosligini va oddiy javobni ko‘ring. Bu sinov hech kimga xabar yubormaydi, AI so‘rovi bajarmaydi.")}</p><form id="test-form"><label class="field"><span>${tr("Mijoz xabari")}</span><input type="text" name="message" placeholder="${tr("Ish vaqtingiz qanday?")}" maxlength="1000" required></label><button class="button primary" type="submit">${icon('send')}${tr("Sinash")}</button></form><div id="test-result" style="margin-top:20px"></div>`);
+  modal(`${modalHead(tr("FAQ va oddiy javob sinovi"))}<p class="hint">${tr("Faqat Smart FAQ va saqlangan oddiy javob tekshiriladi. AI, uyqu rejimi va jadval bu sinovga kirmaydi. Hech kimga xabar yuborilmaydi.")}</p><form id="test-form"><label class="field"><span>${tr("Mijoz xabari")}</span><input type="text" name="message" placeholder="${tr("Ish vaqtingiz qanday?")}" maxlength="1000" required></label><button class="button primary" type="submit">${icon('send')}${tr("Sinash")}</button></form><div id="test-result" style="margin-top:20px"></div>`);
 }
 document.addEventListener('click', async event => {
   const el = event.target.closest('[data-action],[data-period]');
@@ -599,7 +599,7 @@ document.addEventListener('change', async event => {
     });else {
       const [kind, id] = el.dataset.toggle.split(':');
       const key = kind === 'schedule' ? 'schedules' : kind;
-      const result = mode === 'live' ? await api(`/api/${kind}/${id}/toggle`, 'POST') : null;
+      const result = mode === 'live' ? await api(`/api/${kind}/${id}/toggle`, 'POST', {is_enabled: checked}) : null;
       const item = state[key].find(r => r.id === Number(id));
       if (item) item.is_enabled = result?.is_enabled ?? checked;
       persist();

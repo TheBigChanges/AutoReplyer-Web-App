@@ -67,3 +67,31 @@ unchanged. No build step or new dependency is required.
 `tests/browser_design.py` checks all 12 sections in three languages, two themes
 and four widths, including control bounds, core text contrast, dialog bounds and
 native chrome colors. It writes local review screenshots to ignored `artifacts/`.
+
+
+Entry switches use `POST /api/{kind}/{id}/toggle` with an explicit JSON body such
+as `{"is_enabled": false}`. Values must be booleans; empty or ambiguous requests
+are rejected. This makes repeat requests safe across stale tabs and retries.
+Reopen already-running tabs after upgrading from the old implicit-toggle API.
+The reply test previews saved FAQ / standard answers only; it does not run AI,
+sleep or scheduler logic or send messages.
+
+The runner explicitly uses one Uvicorn worker. Rate and membership caches are
+per process, **not global across multiple instances**. Use a shared limiter
+(such as Redis) before horizontally scaling the Render service.
+
+To verify the exact bot version pinned in Dockerfile against real PostgreSQL:
+
+```sh
+AUTOREPLYER_SOURCE=/path/to/the/exact/pinned/bot/source \
+AR_TEST_DATABASE_URL=postgresql://testuser@127.0.0.1:55479/ar_webapp_test \
+python tests/integration_upstream.py
+```
+
+Use a disposable local database: the harness rejects non-loopback hosts and
+names outside `ar_webapp_test*`. It creates/drops its own random schema, uses
+synthetic Telegram sessions and never starts the bot. It verifies source hashes
+in `docs/upstream-integration.json` against Docker's pin. Update that manifest
+and rerun the integration suite when changing the bot pin. Run
+`tests/browser_entry_state.py` against the Web App for stale-tab request payloads
+and the localized preview explanation, alongside the existing browser suites.

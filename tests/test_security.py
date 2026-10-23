@@ -108,7 +108,7 @@ class PlanAndOwnerTests(unittest.TestCase):
             payload = {'title': 'T', 'content': 'C', 'keywords': ['K']}
             self.assertEqual(self.client.post('/api/knowledge', json=payload).status_code, 403)
             self.assertEqual(self.client.patch('/api/knowledge/9', json=payload).status_code, 403)
-            self.assertEqual(self.client.post('/api/knowledge/9/toggle').status_code, 403)
+            self.assertEqual(self.client.post('/api/knowledge/9/toggle', json={'is_enabled': False}).status_code, 403)
         self.db.add_kb_entry.assert_not_called()
         self.db.update_kb_entry.assert_not_called()
         self.db.toggle_kb_entry.assert_not_called()
@@ -120,15 +120,15 @@ class PlanAndOwnerTests(unittest.TestCase):
             getattr(self.db, f'update_{prefix}_entry').return_value = False
             self.assertEqual(self.client.patch(f'/api/{kind}/999', json=body).status_code, 404)
             getattr(self.db, f'update_{prefix}_entry').assert_called_with(123, 999, **body)
-            getattr(self.db, f'toggle_{prefix}_entry').return_value = None
-            self.assertEqual(self.client.post(f'/api/{kind}/999/toggle').status_code, 404)
-            getattr(self.db, f'toggle_{prefix}_entry').assert_called_with(123, 999)
+            getattr(self.db, f'set_{prefix}_entry_enabled').return_value = False
+            self.assertEqual(self.client.post(f'/api/{kind}/999/toggle', json={'is_enabled': False}).status_code, 404)
+            getattr(self.db, f'set_{prefix}_entry_enabled').assert_called_with(123, 999, False)
         self.db.update_schedule_rule.return_value = ('gone', None)
         self.assertEqual(self.client.patch('/api/schedule/999', json={'days': 1, 'start_min': 1, 'end_min': 2}).status_code, 404)
         self.db.update_schedule_rule.assert_called_with(123, 999, days=1, start_min=1, end_min=2, text=None)
-        self.db.get_schedule_rule.return_value = None
-        self.assertEqual(self.client.post('/api/schedule/999/toggle').status_code, 404)
-        self.db.get_schedule_rule.assert_called_with(123, 999)
+        self.assertEqual(self.client.post('/api/schedule/999/toggle', json={'is_enabled': False}).status_code, 404)
+        self.db.update_schedule_rule.assert_called_with(123, 999, is_enabled=False)
+        self.db.get_schedule_rule.assert_not_called()
         for kind, _, prefix in [*cases, ('schedule', {}, 'schedule')]:
             fn = getattr(self.db, f'delete_{prefix}_entry') if kind != 'schedule' else self.db.delete_schedule_rule
             fn.return_value = False
@@ -164,9 +164,11 @@ class PlanAndOwnerTests(unittest.TestCase):
                 self.assertEqual(data['series'] is None, plan in ['free', 'unknown'])
 
     def test_schedule_toggle_returns_authoritative_state(self):
-        self.db.get_schedule_rule.return_value = {'is_enabled': True}
         self.db.update_schedule_rule.return_value = ('ok', None)
-        self.assertIs(self.client.post('/api/schedule/1/toggle').json()['is_enabled'], False)
+        for _ in range(2):
+            self.assertIs(self.client.post('/api/schedule/1/toggle', json={'is_enabled': False}).json()['is_enabled'], False)
+        self.db.update_schedule_rule.assert_called_with(123, 1, is_enabled=False)
+        self.db.get_schedule_rule.assert_not_called()
 
 
 class StreamLimitTests(unittest.TestCase):

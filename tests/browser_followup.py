@@ -44,6 +44,7 @@ with sync_playwright() as p:
             counts[kind] += 1
             held[kind] = route
         elif '/toggle' in url:
+            assert route.request.post_data_json == {'is_enabled': False}
             counts['entry'] += 1
             held['entry'] = route
         else:

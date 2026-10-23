@@ -313,8 +313,8 @@ ish vaqti, soat nechada|часы работы, в какое время|opening 
 Vergul bilan ajrating. Ko‘pi bilan 10 ta, har biri 40 belgigacha.|Разделяйте запятыми. Не более 10 слов или фраз, до 40 символов каждое.|Separate with commas. Up to 10 keywords or phrases, each up to 40 characters.
 Tayyor javob|Готовый ответ|Saved answer
 Bekor qilish|Отмена|Cancel
-Javobni sinab ko‘ring|Проверьте ответ|Test your reply
-Smart FAQ mosligini va oddiy javobni ko‘ring. Bu sinov hech kimga xabar yubormaydi, AI so‘rovi bajarmaydi.|Проверьте совпадение Smart FAQ и обычный ответ. Тест не отправляет сообщения и не обращается к ИИ.|Preview a Smart FAQ match or the standard reply. This test sends no messages and makes no AI requests.
+FAQ va oddiy javob sinovi|Тест FAQ и обычного ответа|FAQ and standard reply test
+Faqat Smart FAQ va saqlangan oddiy javob tekshiriladi. AI, uyqu rejimi va jadval bu sinovga kirmaydi. Hech kimga xabar yuborilmaydi.|Проверяются только Smart FAQ и сохранённый обычный ответ. ИИ, режим сна и расписание в этот тест не входят. Сообщения никому не отправляются.|Only Smart FAQ and the saved standard reply are tested. AI, sleep mode and schedules are outside this test. No messages are sent.
 Mijoz xabari|Сообщение клиента|Customer message
 Ish vaqtingiz qanday?|Каковы ваши часы работы?|What are your opening hours?
 Sinash|Проверить|Test

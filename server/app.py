@@ -122,6 +122,10 @@ class Schedule(Input):
     text: str | None = Field(None, max_length=500)
 
 
+class EntryState(Input):
+    is_enabled: StrictBool
+
+
 class TestMessage(Input):
     message: str = Field(min_length=1, max_length=1000)
 
@@ -334,20 +338,18 @@ def edit_schedule(entry_id: EntryId, body: Schedule, user: User):
 
 
 @app.post('/api/{kind}/{entry_id}/toggle')
-def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: EntryId, user: User):
+def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: EntryId, body: EntryState, user: User):
     db, _, _ = modules()
     uid = user['id']
+    # Explicit state is idempotent across tabs, workers and retried requests.
+    # Schedule validation/cache invalidation stay inside the upstream transaction.
     if kind == 'schedule':
-        rule = db.get_schedule_rule(uid, entry_id)
-        if not rule:
-            raise HTTPException(404, 'Jadval topilmadi.')
-        result = schedule_result(db.update_schedule_rule(uid, entry_id, is_enabled=not rule['is_enabled']))
-        return {**result, 'is_enabled': not rule['is_enabled']}
+        result = schedule_result(db.update_schedule_rule(uid, entry_id, is_enabled=body.is_enabled))
+        return {**result, 'id': entry_id, 'is_enabled': body.is_enabled}
     item_limit(uid, kind)
-    result = getattr(db, f'toggle_{item_prefix(kind)}_entry')(uid, entry_id)
-    if result is None:
+    if not getattr(db, f'set_{item_prefix(kind)}_entry_enabled')(uid, entry_id, body.is_enabled):
         raise HTTPException(404, 'Yozuv topilmadi.')
-    return {'is_enabled': result}
+    return {'is_enabled': body.is_enabled}
 
 
 @app.delete('/api/{kind}/{entry_id}')

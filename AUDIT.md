@@ -3,8 +3,10 @@
 Reviewed baseline: `47f2afabae8b42ac2da62ea03bc935b36dac18c6`.
 Scope: this Web App's browser code, FastAPI adapter, validation, authentication,
 owner isolation, subscription enforcement, deployment settings and dependencies.
-The separate bot repository was read only. Its pinned source remains
-`0e62bc3db51498afa308c1905356ec96eb034aba`.
+The separate bot repository was read only. The initial audit used upstream
+`0e62bc3db51498afa308c1905356ec96eb034aba`. The current Docker pin is
+`eb8a14f87b4f2faf357962b068a0cb040efed76c`; see the 2026-10-23 integration
+follow-up below and [the source manifest](docs/upstream-integration.json).
 
 ## Findings and fixes
 
@@ -121,3 +123,64 @@ failure and theme icon persistence. It passes alongside the four existing Chrome
 suites with no page errors. Node translation checks now cover 349 messages. The
 backend, authentication, tariff rules and original bot code are unchanged by this
 follow-up.
+
+
+## Concurrency and current upstream follow-up — 2026-10-23
+
+Baseline: Web App `b5067c92b311b11059a80fb6b3a1c413f376dd92`, Docker upstream
+`eb8a14f87b4f2faf357962b068a0cb040efed76c` (the user's newer pin is preserved).
+No original bot repository changes were made.
+
+- **Confirmed scheduler race:** two concurrent requests were held immediately
+  after reading the same real PostgreSQL row. Both read enabled=true, both
+  returned false and the row ended false after two implicit flips. The old
+  read/negate/write happened outside the upstream write transaction.
+- **Fix:** entry controls now send their desired `is_enabled` boolean. The API
+  requires it and never reads/negates a schedule's old state. It passes explicit
+  schedule state to the upstream transaction and FAQ/Knowledge state to the
+  new pinned bot's owner-scoped setters. Duplicates and retries set the same value.
+  Existing ownership, plan checks, schedule validation and cache invalidation
+  remain. Missing/string/numeric booleans are rejected without writes. The
+  `/toggle` path is retained, with an explicit-state body; already-open older
+  tabs must reload and cannot silently make an ambiguous change.
+- **Rate-limit scope:** counters and membership cache are still process-local.
+  `server.run` explicitly starts **one worker**, including when a platform sets
+  `WEB_CONCURRENCY`. This does not make the limit global across Render instances.
+  Horizontal scaling requires a shared limiter such as Redis before enabling
+  more instances. Production instance count was not inspected. No Redis service,
+  schema migration or new runtime dependency was introduced for this follow-up.
+- **Preview scope:** the existing test is intentionally saved FAQ / standard
+  reply only. The user explicitly chose clearer wording rather than real AI.
+  Title and explanation now identify the scope in Uzbek/Russian/English and
+  state that AI, sleep mode and schedules are outside the test. It sends no
+  Telegram message and makes no Gemini request or AI-quota/analytics write.
+
+Validation against the exact current upstream source:
+
+- 43 Python API/auth/security tests passed; Node checked all350 messages and
+  app.js syntax. New API cases check strict explicit state, repeat requests and
+  keeping one worker despite a platform worker environment.
+- **9 real PostgreSQL integration tests passed**, using PostgreSQL18.6 in a
+  temporary loopback cluster and a random per-run schema. The tests use real
+  Telegram HMAC verification with a synthetic token, the real pinned db/logic/
+  analytics modules and actual SQL; no DB helpers are mocked. They cover
+  bootstrap/connection/language, FAQ and Knowledge CRUD, cross-owner denial,
+  Free/Plus/Pro/Ultra permissions and expiry, FAQ15/30/65, Knowledge55,
+  schedule1/3/10/30 limits at concurrent last-slot boundaries, scheduler edit,
+  midnight conflicts/cache invalidation, four concurrent identical state writes,
+  real analytics periods/payload filtering and preview side effects.
+- The integration harness permits only a loopback `ar_webapp_test*` database,
+  initializes only its random schema and cleans it up. The running Web App
+  never calls init_db. Source SHA256 checks and the Docker pin are bound to
+  [upstream-integration.json](docs/upstream-integration.json); changing the pin
+  makes the contract test fail until the manifest/audit are refreshed.
+- No real production Telegram session, Gemini call or database write was used.
+  Docker is unavailable locally: runtime tests used Python3.14, while Docker
+  targets Python3.13. Historical audit evidence above remains dated separately.
+
+- Six Chrome suites passed with the actual local FastAPI/CSP server and mocked
+  authenticated browser APIs: browser_entry_state, browser_followup,
+  browser_i18n, browser_interactions, browser_audit and browser_design. New
+  regressions cover two stale tabs sending the same off intent for all three
+  entry types and the preview explanation in three languages at320px. The
+  design matrix still passes288 theme/language/viewport/route combinations.
