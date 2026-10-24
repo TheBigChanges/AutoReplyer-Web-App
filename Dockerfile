@@ -2,7 +2,7 @@ FROM python:3.13-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-ARG AUTOREPLYER_REF=27db864e1b018191aebbf72e03172cfd3120a88e
+ARG AUTOREPLYER_REF=1098ee069572fc3488aeca71ae1d1dd83520355d
 ADD https://codeload.github.com/TheBigChanges/AutoReplyer/tar.gz/${AUTOREPLYER_REF} /tmp/upstream.tar.gz
 RUN mkdir /opt/AutoReplyer && tar -xzf /tmp/upstream.tar.gz --strip-components=1 -C /opt/AutoReplyer && rm /tmp/upstream.tar.gz
 ENV AUTOREPLYER_SOURCE=/opt/AutoReplyer PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
