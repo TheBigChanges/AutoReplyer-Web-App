@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.13', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: API, authentication, security and deployment probe tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+  javascript:
+    name: JavaScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Check browser module syntax
+        run: |
+          for file in dist/*.js; do
+            node --check "$file"
+          done
+      - run: node tests/test_i18n.mjs
+      - run: node tests/test_api_client.mjs
+
+  postgres:
+    name: Pinned bot / PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: ar_webapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U testuser -d ar_webapp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AR_TEST_DATABASE_URL: postgresql://testuser:test-password@127.0.0.1:5432/ar_webapp_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Fetch the exact Docker-pinned upstream source
+        run: |
+          python - <<'PY'
+          import os, re, tarfile, urllib.request
+          from pathlib import Path
+          ref = re.search(r'ARG AUTOREPLYER_REF=([0-9a-f]{40})', Path('Dockerfile').read_text()).group(1)
+          root = Path(os.environ['RUNNER_TEMP']) / 'upstream'
+          root.mkdir(exist_ok=True)
+          archive = root / 'source.tar.gz'
+          with urllib.request.urlopen(f'https://codeload.github.com/TheBigChanges/AutoReplyer/tar.gz/{ref}', timeout=60) as response:
+              archive.write_bytes(response.read())
+          with tarfile.open(archive) as source:
+              source.extractall(root, filter='data')
+          with Path(os.environ['GITHUB_ENV']).open('a') as output:
+              output.write(f'AUTOREPLYER_SOURCE={root / ("AutoReplyer-" + ref)}\n')
+          print(f'Upstream contract revision: {ref}')
+          PY
+      - name: Real SQL, owner isolation, plan limits and concurrent state tests
+        run: python tests/integration_upstream.py

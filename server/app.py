@@ -9,6 +9,7 @@ import importlib
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -223,7 +224,9 @@ async def response_headers(request: Request, call_next):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'service': 'autoreplyer-webapp'}
+    revision = os.environ.get('RENDER_GIT_COMMIT', '')
+    return {'status': 'ok', 'service': 'autoreplyer-webapp',
+            'revision': revision if re.fullmatch(r'[0-9a-f]{40}', revision) else None}
 
 
 @app.get('/api/bootstrap')

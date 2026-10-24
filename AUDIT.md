@@ -184,3 +184,50 @@ Validation against the exact current upstream source:
   regressions cover two stale tabs sending the same off intent for all three
   entry types and the preview explanation in three languages at320px. The
   design matrix still passes288 theme/language/viewport/route combinations.
+
+
+## CI and production evidence follow-up — 2026-10-24
+
+The review baseline was9fe010c63134845a7f5bc68190b385ac1adf0b2a. Its repository
+tree had no .github/workflows entries and GitHub Actions reported zero runs.
+
+- `.github/workflows/ci.yml` now runs on push, pull_request and manual dispatch.
+  Python3.13 (Docker's runtime) and3.14 run the API/auth/security and deployment
+  probe tests. Node22 checks all browser-module syntax,350 translations and API
+  client URL/redirect behavior. A separate PostgreSQL18 service job downloads
+  the exact Docker ref, validates the source manifest and runs the real SQL
+  integration suite. No production credentials or bot polling are used.
+- Workflow actions are pinned by full commit SHA; jobs use contents:read,
+  bounded runtimes and cancellation of superseded runs. Browser suites are
+  still separate local checks; this workflow does not claim to run them.
+- A separate Verify Render workflow runs after successful main push CI or by
+  manual dispatch on main. Pull-request workflow runs do not invoke it. It
+  checks the upstream workflow's exact head SHA, uses public GET only, waits
+  for deployment, checks the12 asset bodies against the checkout and retains
+  a JSON evidence artifact for7 days. It is separate from CI to avoid a
+  CI/deploy dependency cycle.
+- `/api/health` now reports only a valid40-character public commit from Render's
+  RENDER_GIT_COMMIT variable, or null outside that environment. It does not
+  load bot modules or access the database. Script regressions prove that a
+  healthy older revision, a stale asset, unsigned API access accidentally
+  allowed, or missing CSP cannot pass the deployment check.
+- Runtime deployment-variable source: [Render default environment variables](https://render.com/docs/environment-variables#all-runtimes).
+
+Evidence boundaries:
+
+- Local Python API/auth/security/deployment probe suite:48 tests passed; both
+  JavaScript suites passed. Actual workflow-run results must be read from
+  Actions, not inferred from local results or workflow YAML alone.
+- On2026-10-24, the user opted into testing through a real Telegram Mini App
+  session on a separate test account. The requested flow covered account/plan,
+  permitted FAQ/Knowledge edits, schedule synchronization (allowing the60-second
+  cache), working with bot + Web App, and a reply to another Telegram account.
+  The user replied **"ha ishladi"**. This is user-reported production acceptance,
+  not an independently captured session trace or a per-plan/per-feature report.
+- Automated isolated PostgreSQL tests cover permissions, owners, limits and
+  concurrent writes. They do not run a real Telegram polling bot. Long-running
+  bot/Web App interactions, every production plan and rare delivery/cache races
+  are not claimed exhaustively verified by that brief user confirmation.
+- Rate and membership caches remain process-local. The existing single worker
+  remains explicit; multi-instance deployment still needs a shared limiter.
+  This remains a documented scaling limitation, not a current Redis deployment.

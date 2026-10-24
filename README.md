@@ -95,3 +95,29 @@ in `docs/upstream-integration.json` against Docker's pin. Update that manifest
 and rerun the integration suite when changing the bot pin. Run
 `tests/browser_entry_state.py` against the Web App for stale-tab request payloads
 and the localized preview explanation, alongside the existing browser suites.
+
+
+Continuous checks run in [GitHub Actions](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions)
+on every push and pull request (`.github/workflows/ci.yml`): Python3.13/3.14
+API/auth/security tests, Node22 syntax/catalog/API-client tests, and the real
+PostgreSQL18 contract suite against the exact Docker-pinned bot source. Actions
+are pinned to reviewed commit SHAs and jobs have read-only repository access.
+No production token or database credential is required.
+
+After successful CI for a main-branch push, the separate **Verify Render**
+workflow checks that `/api/health` reports that exact commit, the12 public assets
+match the tested checkout, unsigned API access returns401, and private paths and
+security/cache headers remain protected. It only sends public GET requests and
+uploads a JSON report as a seven-day Actions artifact. Keeping this separate
+avoids making CI depend on a deploy that might itself wait for passing CI.
+You can also run it with **Run workflow** on main or locally:
+
+```sh
+python scripts/verify_deploy.py --revision FULL_GITHUB_COMMIT_SHA
+```
+
+Health reads Render's `RENDER_GIT_COMMIT` (public commit SHA only); non-Render
+local runs report revision=null unless that environment variable is provided.
+A healthy older build cannot pass the exact-revision verification. This public
+smoke test is separate from real Telegram identity, bot delivery or shared DB
+behavior, and the report states its scope.
