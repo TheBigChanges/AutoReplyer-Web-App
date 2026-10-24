@@ -6,7 +6,7 @@
     "analytics.py": "f550cc266f9e4fb2b1dc0a7cf55f3e7c94f7bcf8274a334292e848558db744c0",
     "i18n.py": "265a2cac7a993f2415e64043d8a3bf71f643d4a71ff0576f76c00c49b111a4ab"
   },
-  "validation_policy": "The current pin and source hashes are rechecked by CI on every push/PR. Current test outcomes are recorded in GitHub Actions; previous observations below apply only to their recorded pin.",
+  "validation_policy": "Historical audit baseline only. Current CI prepares a fresh manifest from Dockerfile on every run and executes all PostgreSQL contract tests; current outcomes and source fingerprints are recorded in Actions.",
   "previous_validation": {
     "upstream_ref": "eb8a14f87b4f2faf357962b068a0cb040efed76c",
     "source_sha256": {

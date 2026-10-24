@@ -4,7 +4,6 @@ AR_TEST_DATABASE_URL must name a loopback ar_webapp_test* database. Each run own
 one random schema, initializes the bot schema there and drops only that schema.
 The production Web App still never calls init_db or runs migrations.
 """
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,6 +24,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from test_auth import signed
+from scripts.prepare_upstream import verify_source
 
 
 class UpstreamIntegrationTests(unittest.TestCase):
@@ -41,13 +41,10 @@ class UpstreamIntegrationTests(unittest.TestCase):
         # Pin the network address too, overriding a possible PGHOSTADDR env value.
         dsn = extensions.make_dsn(dsn, hostaddr='::1' if config['host'] == '::1' else '127.0.0.1')
         source = Path(os.environ['AUTOREPLYER_SOURCE']).resolve()
-        manifest = json.loads((ROOT / 'docs/upstream-integration.json').read_text())
+        manifest_path = Path(os.environ.get('AR_TEST_UPSTREAM_MANIFEST') or ROOT / 'docs/upstream-integration.json')
+        manifest = json.loads(manifest_path.read_text())
         pin = re.search(r'ARG AUTOREPLYER_REF=([0-9a-f]{40})', (ROOT / 'Dockerfile').read_text()).group(1)
-        if manifest['upstream_ref'] != pin:
-            raise RuntimeError('Docker pin changed; refresh the upstream integration manifest and audit.')
-        for name, digest in manifest['source_sha256'].items():
-            if hashlib.sha256((source / name).read_bytes()).hexdigest() != digest:
-                raise RuntimeError(f'Unexpected upstream source: {name}')
+        verify_source(source, manifest, pin)
         cls.schema = 'ar_integration_' + uuid4().hex
         cls.admin = psycopg2.connect(dsn)
         cls.admin.autocommit = True

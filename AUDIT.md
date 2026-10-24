@@ -4,9 +4,9 @@ Reviewed baseline: `47f2afabae8b42ac2da62ea03bc935b36dac18c6`.
 Scope: this Web App's browser code, FastAPI adapter, validation, authentication,
 owner isolation, subscription enforcement, deployment settings and dependencies.
 The separate bot repository was read only. The initial audit used upstream
-`0e62bc3db51498afa308c1905356ec96eb034aba`. The current Docker pin is
-`27db864e1b018191aebbf72e03172cfd3120a88e`; see the 2026-10-23 integration
-follow-up below and [the source manifest](docs/upstream-integration.json).
+`0e62bc3db51498afa308c1905356ec96eb034aba`. Historical source snapshots are in [the audit manifest](docs/upstream-integration.json).
+`Dockerfile` selects the active pin; CI prepares and tests that exact source on
+every run. See the integration and CI pin-update follow-ups below.
 
 ## Findings and fixes
 
@@ -292,3 +292,35 @@ The non-urgent scaling limitation is retained explicitly. No real production
 load test or authenticated database mutation is performed by CI. A green browser
 job means those named isolated browser regressions passed, not that all possible
 production behaviors have been proven safe.
+
+
+## CI pin-update failure fixed — 2026-10-24
+
+Failed run40105913446 on Web App004d850154d9d93f6f94223a5182ca4d066cbe7e
+updated the Docker bot pin to1098ee069572fc3488aeca71ae1d1dd83520355d.
+Python3.13/3.14, JavaScript and Browser jobs passed. The PostgreSQL job ran zero
+tests: its setup required the repository's older27db864e audit manifest to match
+Docker before running any SQL. Verify Render was consequently skipped.
+
+The old manual manifest-update requirement is replaced in CI:
+
+- `scripts/prepare_upstream.py` reads the full40-hex Docker ref and downloads that
+  immutable upstream archive over HTTPS. It checks the commit-specific archive
+  root, extracts through Python's data filter into a fresh directory, requires
+  all four imported modules, and records their SHA256 plus archive identity.
+- It exports AUTOREPLYER_SOURCE and AR_TEST_UPSTREAM_MANIFEST to subsequent CI
+  steps. The integration harness still rejects a different pin, incomplete
+  manifests or files changed after preparation, before database initialization.
+  No contract test is skipped or converted to a cached success.
+- Every run then executes all nine real PostgreSQL contract tests. The prepared
+  manifest is source evidence only; only the job outcome proves those tests
+  passed. It is uploaded as an upstream-contract artifact with7-day retention.
+- The repository JSON remains dated historical evidence. It is no longer a
+  prerequisite manual edit for each Docker pin update in CI. Local runs can
+  prepare their own manifest; the strict baseline fallback remains available.
+- Regression tests cover changed pins, fresh extraction, wrong archives, missing
+  modules, unpinned refs, path traversal and post-download changes. All existing
+  API/auth/plan/owner tests and isolated PostgreSQL tests remain in the pipeline.
+- The user's new pin is preserved. Upstream changes include BIO/name-clock
+  state/helpers and translations; original bot repository code is unchanged by
+  this Web App fix. Production schema migrations are not run by the adapter.

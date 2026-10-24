@@ -75,25 +75,18 @@ jobs:
           python-version: '3.13'
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
-      - name: Fetch the exact Docker-pinned upstream source
-        run: |
-          python - <<'PY'
-          import os, re, tarfile, urllib.request
-          from pathlib import Path
-          ref = re.search(r'ARG AUTOREPLYER_REF=([0-9a-f]{40})', Path('Dockerfile').read_text()).group(1)
-          root = Path(os.environ['RUNNER_TEMP']) / 'upstream'
-          root.mkdir(exist_ok=True)
-          archive = root / 'source.tar.gz'
-          with urllib.request.urlopen(f'https://codeload.github.com/TheBigChanges/AutoReplyer/tar.gz/{ref}', timeout=60) as response:
-              archive.write_bytes(response.read())
-          with tarfile.open(archive) as source:
-              source.extractall(root, filter='data')
-          with Path(os.environ['GITHUB_ENV']).open('a') as output:
-              output.write(f'AUTOREPLYER_SOURCE={root / ("AutoReplyer-" + ref)}\n')
-          print(f'Upstream contract revision: {ref}')
-          PY
+      - name: Prepare the exact Docker-pinned source and fresh manifest
+        run: python scripts/prepare_upstream.py --dest "$RUNNER_TEMP/upstream" --output "$RUNNER_TEMP/upstream-contract.json"
       - name: Real SQL, owner isolation, plan limits and concurrent state tests
         run: python tests/integration_upstream.py
+      - name: Save the exact tested source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: upstream-contract-${{ github.run_id }}
+          path: ${{ runner.temp }}/upstream-contract.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   browser:
     name: Browser / Chromium

@@ -86,16 +86,22 @@ per process, **not global across multiple instances**. Use a shared limiter
 To verify the exact bot version pinned in Dockerfile against real PostgreSQL:
 
 ```sh
-AUTOREPLYER_SOURCE=/path/to/the/exact/pinned/bot/source \
+python scripts/prepare_upstream.py --dest /tmp/ar-upstream --output /tmp/ar-upstream/source-manifest.json
+
+AUTOREPLYER_SOURCE=/source/path/printed/by/the/command \
+AR_TEST_UPSTREAM_MANIFEST=/tmp/ar-upstream/source-manifest.json \
 AR_TEST_DATABASE_URL=postgresql://testuser@127.0.0.1:55479/ar_webapp_test \
 python tests/integration_upstream.py
 ```
 
 Use a disposable local database: the harness rejects non-loopback hosts and
 names outside `ar_webapp_test*`. It creates/drops its own random schema, uses
-synthetic Telegram sessions and never starts the bot. It verifies source hashes
-in `docs/upstream-integration.json` against Docker's pin. Update that manifest
-and rerun the integration suite when changing the bot pin. Run
+synthetic Telegram sessions and never starts the bot. It verifies all four imported source hashes
+and the current Docker pin using the freshly prepared manifest. CI prepares this
+input automatically for each run, so changing the pin still runs all contract
+tests. `docs/upstream-integration.json` is a historical audit snapshot, not a
+cached pass for a newer pin. Without an explicit test manifest, local tests retain
+the strict historical-baseline fallback. Run
 `tests/browser_entry_state.py` against the Web App for stale-tab request payloads
 and the localized preview explanation, alongside the existing browser suites.
 
