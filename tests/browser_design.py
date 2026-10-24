@@ -11,7 +11,7 @@ setHeaderColor(c){window.chromeColors.header=c},setBackgroundColor(c){window.chr
 Path('artifacts').mkdir(exist_ok=True)
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True, args=['--no-sandbox'])
+    browser = p.chromium.launch(executable_path=os.environ.get('AR_BROWSER_EXECUTABLE', '/usr/bin/google-chrome'), headless=True, args=['--no-sandbox'])
     context = browser.new_context(locale='uz-UZ', viewport={'width': 1440, 'height': 1000}, reduced_motion='reduce')
     context.route('https://telegram.org/**', lambda route: route.fulfill(body=STUB, content_type='application/javascript'))
     page = context.new_page()

@@ -7,7 +7,7 @@ BASE = os.environ.get('AR_BASE_URL', 'http://127.0.0.1:8765')
 STUB = 'window.Telegram={WebApp:{initData:"",ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){}}};'
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True, args=['--no-sandbox'])
+    browser = p.chromium.launch(executable_path=os.environ.get('AR_BROWSER_EXECUTABLE', '/usr/bin/google-chrome'), headless=True, args=['--no-sandbox'])
     errors = []
     context = browser.new_context(locale='uz-UZ', viewport={'width': 1440, 'height': 1000})
     context.route('https://telegram.org/**', lambda r: r.fulfill(body=STUB, content_type='application/javascript'))

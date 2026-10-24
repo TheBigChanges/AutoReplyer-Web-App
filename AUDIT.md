@@ -5,7 +5,7 @@ Scope: this Web App's browser code, FastAPI adapter, validation, authentication,
 owner isolation, subscription enforcement, deployment settings and dependencies.
 The separate bot repository was read only. The initial audit used upstream
 `0e62bc3db51498afa308c1905356ec96eb034aba`. The current Docker pin is
-`eb8a14f87b4f2faf357962b068a0cb040efed76c`; see the 2026-10-23 integration
+`27db864e1b018191aebbf72e03172cfd3120a88e`; see the 2026-10-23 integration
 follow-up below and [the source manifest](docs/upstream-integration.json).
 
 ## Findings and fixes
@@ -198,8 +198,8 @@ tree had no .github/workflows entries and GitHub Actions reported zero runs.
   the exact Docker ref, validates the source manifest and runs the real SQL
   integration suite. No production credentials or bot polling are used.
 - Workflow actions are pinned by full commit SHA; jobs use contents:read,
-  bounded runtimes and cancellation of superseded runs. Browser suites are
-  still separate local checks; this workflow does not claim to run them.
+  bounded runtimes and cancellation of superseded runs. At that initial stage browser suites were local-only; the follow-up below
+  adds them to CI.
 - A separate Verify Render workflow runs after successful main push CI or by
   manual dispatch on main. Pull-request workflow runs do not invoke it. It
   checks the upstream workflow's exact head SHA, uses public GET only, waits
@@ -247,3 +247,48 @@ Observed first automatic runs for commit
   remain visible through the README badges and workflow pages. Exact-revision
   public smoke verification does not claim authenticated bot/DB coverage beyond
   the separately recorded isolated tests and user-reported acceptance above.
+
+
+## Browser CI and remaining coverage — 2026-10-24
+
+The initial review baseline was `de363785ae5b0ca835e96ca7b96a7686b4b137e3`.
+During this work the user updated Docker to bot27db864e in Web App commit
+`457645789759fe819db5df3ea233db5851b677c4`. That pin is preserved; the source
+manifest now binds its exact hashes and retains the old observations under
+previous_validation. Upstream changed bot.py and its tests; the imported
+db/logic/analytics/i18n files are byte-identical to the prior pin. The current
+contract is rechecked by CI rather than treating old-pin results as a new run.
+The review correctly noted that browser checks were local-only. A dedicated **Browser / Chromium** CI job
+now runs every existing browser suite on push/PR/manual CI: browser_check,
+browser_i18n, browser_interactions, browser_audit, browser_followup,
+browser_navigation, browser_motion, browser_entry_state and browser_design.
+
+- Playwright1.64.1 is pinned as a test-only dependency, with its matching
+  installed Chromium and Linux dependencies. Ubuntu24.04 / Python3.13 job uses
+  the same pinned official Actions as the other jobs.
+- A shared harness owns the local FastAPI process and test port, excludes
+  production credentials, waits for readiness, sets the executable path,
+  bounds each suite, collects all results and shuts the server down. Each
+  test still supports local Google Chrome through AR_BROWSER_EXECUTABLE.
+- Logs, summary JSON and screenshots are uploaded with7-day retention even
+  when tests fail. A failed suite fails the job; successful checks from some
+  suites do not mask another suite's failure. The downstream Render verifier
+  still requires successful overall CI, now including these browser checks.
+- No production application behavior, bot repository, plan rules or runtime
+  requirements are changed by this browser-test addition.
+
+Coverage remains environment-specific:
+
+| Area | Evidence and boundary |
+| --- | --- |
+| Free/Plus/Pro/Ultra permissions and expiry | Automated API + real isolated PostgreSQL tests; not every real Telegram production plan independently exercised. |
+| Concurrent desired state, owner limits and midnight schedules | Real SQL integration concurrency plus mocked browser stale-tab/request-race tests; not a production traffic soak. |
+| Languages, controls and layout | Automated browser suites including UZ/RU/EN,4 widths,2 themes and288 route/layout combinations. |
+| Actual Telegram Mini App and bot reply | Prior user-reported test-account success; no independent full session capture or per-feature/per-plan trace. |
+| Sustained production behavior | Multi-day operation, multiple Render instances and rare bot/cache/delivery races are not independently certified by these checks. |
+| Rate and membership caches | Still in Python process memory, one worker explicit. Shared rate limiting is required before multi-instance scaling; Redis is not deployed. |
+
+The non-urgent scaling limitation is retained explicitly. No real production
+load test or authenticated database mutation is performed by CI. A green browser
+job means those named isolated browser regressions passed, not that all possible
+production behaviors have been proven safe.

@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright, expect
 artifacts = Path('artifacts')
 artifacts.mkdir(exist_ok=True)
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True, args=['--no-sandbox'])
+    browser = p.chromium.launch(executable_path=os.environ.get('AR_BROWSER_EXECUTABLE', '/usr/bin/google-chrome'), headless=True, args=['--no-sandbox'])
     page = browser.new_page(viewport={'width': 1440, 'height': 1100}, device_scale_factor=1, locale='uz-UZ')
     base_url = os.environ.get('AR_BASE_URL', 'http://127.0.0.1:8765')
     errors = []

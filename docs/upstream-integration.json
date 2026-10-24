@@ -1,36 +1,46 @@
 {
-  "upstream_ref": "eb8a14f87b4f2faf357962b068a0cb040efed76c",
+  "upstream_ref": "27db864e1b018191aebbf72e03172cfd3120a88e",
   "source_sha256": {
     "db.py": "7ec2c1d0fb566d1cdd2de590d7d5ef2a67c3d4de060f7dd549a9434f4ca5126b",
     "logic.py": "b86b3c28efe8d39ad6d9723b5c3effe5ee46b72f66de96c27f29bd8603984bbb",
     "analytics.py": "f550cc266f9e4fb2b1dc0a7cf55f3e7c94f7bcf8274a334292e848558db744c0",
     "i18n.py": "265a2cac7a993f2415e64043d8a3bf71f643d4a71ff0576f76c00c49b111a4ab"
   },
-  "checked_at": "2026-10-23",
-  "database": "isolated PostgreSQL 18.6",
-  "status": "passed",
-  "tests_passed": 9,
-  "api_security_tests_passed": 43,
-  "coverage": [
-    "signed bootstrap, connection and language",
-    "FAQ and Knowledge CRUD, owner isolation and idempotent state",
-    "Free/Plus/Pro/Ultra permissions and expired plan",
-    "FAQ 15/30/65, Knowledge 55, schedule 1/3/10/30 atomic limits",
-    "scheduler edit, midnight overlap, cache invalidation and concurrent state",
-    "real analytics counters, periods and plan payload filtering",
-    "FAQ/standard preview without external messages or AI quota writes"
-  ],
-  "limitations": [
-    "isolated PostgreSQL only; no production Telegram session or database writes",
-    "API rate/membership caches remain process-local; one worker is explicit",
-    "Docker unavailable locally; runtime Python 3.14, Docker targets Python 3.13"
-  ],
-  "browser_suites_passed": [
-    "browser_entry_state",
-    "browser_followup",
-    "browser_i18n",
-    "browser_interactions",
-    "browser_audit",
-    "browser_design"
-  ]
+  "validation_policy": "The current pin and source hashes are rechecked by CI on every push/PR. Current test outcomes are recorded in GitHub Actions; previous observations below apply only to their recorded pin.",
+  "previous_validation": {
+    "upstream_ref": "eb8a14f87b4f2faf357962b068a0cb040efed76c",
+    "source_sha256": {
+      "db.py": "7ec2c1d0fb566d1cdd2de590d7d5ef2a67c3d4de060f7dd549a9434f4ca5126b",
+      "logic.py": "b86b3c28efe8d39ad6d9723b5c3effe5ee46b72f66de96c27f29bd8603984bbb",
+      "analytics.py": "f550cc266f9e4fb2b1dc0a7cf55f3e7c94f7bcf8274a334292e848558db744c0",
+      "i18n.py": "265a2cac7a993f2415e64043d8a3bf71f643d4a71ff0576f76c00c49b111a4ab"
+    },
+    "checked_at": "2026-10-23",
+    "database": "isolated PostgreSQL 18.6",
+    "status": "passed",
+    "tests_passed": 9,
+    "api_security_tests_passed": 43,
+    "coverage": [
+      "signed bootstrap, connection and language",
+      "FAQ and Knowledge CRUD, owner isolation and idempotent state",
+      "Free/Plus/Pro/Ultra permissions and expired plan",
+      "FAQ 15/30/65, Knowledge 55, schedule 1/3/10/30 atomic limits",
+      "scheduler edit, midnight overlap, cache invalidation and concurrent state",
+      "real analytics counters, periods and plan payload filtering",
+      "FAQ/standard preview without external messages or AI quota writes"
+    ],
+    "limitations": [
+      "isolated PostgreSQL only; no production Telegram session or database writes",
+      "API rate/membership caches remain process-local; one worker is explicit",
+      "Docker unavailable locally; runtime Python 3.14, Docker targets Python 3.13"
+    ],
+    "browser_suites_passed": [
+      "browser_entry_state",
+      "browser_followup",
+      "browser_i18n",
+      "browser_interactions",
+      "browser_audit",
+      "browser_design"
+    ]
+  }
 }

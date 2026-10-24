@@ -102,8 +102,9 @@ and the localized preview explanation, alongside the existing browser suites.
 
 Continuous checks run in [GitHub Actions](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions)
 on every push and pull request (`.github/workflows/ci.yml`): Python3.13/3.14
-API/auth/security tests, Node22 syntax/catalog/API-client tests, and the real
-PostgreSQL18 contract suite against the exact Docker-pinned bot source. Actions
+API/auth/security tests, Node22 syntax/catalog/API-client tests, the real
+PostgreSQL18 contract suite against the exact Docker-pinned bot source, and
+nine Playwright/Chromium browser suites against an isolated local FastAPI server. Actions
 are pinned to full official release commit SHAs and jobs have read-only repository access.
 No production token or database credential is required.
 
@@ -124,3 +125,26 @@ local runs report revision=null unless that environment variable is provided.
 A healthy older build cannot pass the exact-revision verification. This public
 smoke test is separate from real Telegram identity, bot delivery or shared DB
 behavior, and the report states its scope.
+
+
+Browser CI installs the test-only `requirements-browser.txt` dependency set and
+its matching Chromium on Ubuntu24.04. It runs CRUD/responsive checks, all3 locales,
+keyboard/menus/modals, drafts and request races, pending controls/storage fallback,
+Back navigation, animation interruption/reduced motion, stale-tab desired state,
+and the288-layout design matrix. Logs, JSON results and screenshots are saved
+as a seven-day `browser-checks-*` Actions artifact, including on failure.
+
+To run the same harness locally with Playwright's downloaded Chromium:
+
+```sh
+python -m pip install -r requirements-browser.txt
+python -m playwright install --with-deps chromium
+python scripts/run_browser_checks.py
+```
+
+For an already-installed Chrome, set `AR_BROWSER_EXECUTABLE=/usr/bin/google-chrome`.
+Individual browser scripts keep that default; the harness defaults to bundled
+Chromium and starts/stops its own local server, selects a free local port, strips
+production connection credentials and bounds each suite to180 seconds. It tests
+demo/mocked authenticated APIs, not real production Telegram accounts. Test-only
+browser dependencies are not installed in the Render image.
