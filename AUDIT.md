@@ -231,3 +231,19 @@ Evidence boundaries:
 - Rate and membership caches remain process-local. The existing single worker
   remains explicit; multi-instance deployment still needs a shared limiter.
   This remains a documented scaling limitation, not a current Redis deployment.
+
+
+Observed first automatic runs for commit
+`c777c34946bb53737de858505049de436a4f1d6e` on2026-10-24:
+
+- [CI run40072524605](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions/runs/40072524605)
+  completed successfully: all four jobs passed (48 Python tests on both3.13 and
+  3.14, JavaScript checks, and9 pinned-upstream PostgreSQL integration tests).
+- [Verify Render run40072572294](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions/runs/40072572294)
+  was triggered automatically by that successful CI and passed. Its public
+  revision matched the tested commit; all12 assets, unsigned401, private404 and
+  required headers passed. The JSON artifact was uploaded with7-day retention.
+- These are observed completed GitHub runs, not projected results. Later runs
+  remain visible through the README badges and workflow pages. Exact-revision
+  public smoke verification does not claim authenticated bot/DB coverage beyond
+  the separately recorded isolated tests and user-reported acceptance above.

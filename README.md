@@ -1,5 +1,8 @@
 # AutoReplyer-Web-App
 
+[![CI](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions/workflows/ci.yml/badge.svg)](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions/workflows/ci.yml)
+[![Verify Render](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions/workflows/verify-render.yml/badge.svg)](https://github.com/TheBigChanges/AutoReplyer-Web-App/actions/workflows/verify-render.yml)
+
 Web App supports **O‘zbekcha, Русский, and English**. Choose a language in the
 top bar or Settings. Your explicit choice is remembered on this device. On first
 sign-in, the app uses the language saved in the bot, then the Telegram/device
@@ -101,7 +104,7 @@ Continuous checks run in [GitHub Actions](https://github.com/TheBigChanges/AutoR
 on every push and pull request (`.github/workflows/ci.yml`): Python3.13/3.14
 API/auth/security tests, Node22 syntax/catalog/API-client tests, and the real
 PostgreSQL18 contract suite against the exact Docker-pinned bot source. Actions
-are pinned to reviewed commit SHAs and jobs have read-only repository access.
+are pinned to full official release commit SHAs and jobs have read-only repository access.
 No production token or database credential is required.
 
 After successful CI for a main-branch push, the separate **Verify Render**
