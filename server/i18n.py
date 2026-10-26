@@ -8,6 +8,11 @@ def language_code(value: str | None) -> str:
 
 
 MESSAGES = {
+    'Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.': ('Сначала запустите новую версию бота. База автоматизации ещё не готова.', 'Start the updated bot first. The Automation database is not ready yet.'),
+    'Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.': ('Достигнут лимит автоматизации: не более 20 правил.', 'Automation limit reached: at most 20 rules.'),
+    'Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.': ('Ключевое слово: 1–50 символов и 1–5 слов. * допускается только в конце после слова длиной от 3 букв.', 'Use 1–50 characters and 1–5 words. * is allowed only at the end, after a word of at least 3 letters.'),
+    'O‘chirish tasdig‘i eskirgan. Oynani qayta oching.': ('Подтверждение удаления устарело. Откройте окно заново.', 'Delete confirmation expired. Reopen the dialog.'),
+    'Bir oz kutib, qayta urinib ko‘ring.': ('Немного подождите и повторите попытку.', 'Wait a moment and try again.'),
     'So‘rov hajmi juda katta.': ('Размер запроса слишком большой.', 'The request body is too large.'),
     'So‘rov vaqti tugadi.': ('Время ожидания запроса истекло.', 'The request timed out.'),
     'Telegram orqali oching yoki sessiyani yangilang.': ('Откройте приложение в Telegram или обновите сеанс.', 'Open the app in Telegram or refresh your session.'),

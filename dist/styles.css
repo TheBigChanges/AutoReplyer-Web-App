@@ -160,3 +160,7 @@ button:not(:disabled):not([aria-busy=true]):active,.button:active,.quick-item:ac
 @media(prefers-reduced-motion:reduce){.back-button:hover>svg,.back-button:active>svg{transform:none!important}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}.button:active,.button:active>svg,.icon-button:active,.icon-button:active>svg,.quick-item:hover,.quick-item:active,.quick-item:hover .quick-icon,.stat:hover,.plan-card:hover,.language-trigger:active,.language-option:active,.day-picker label:active span,.role-option:active span,.mobile-nav a.active svg,.mobile-nav a:active svg,button:active,.avatar:active,.brand:active,.help-link:active,.upgrade a:active,#navigation a:active,#navigation a.active>svg,#navigation a:hover>svg,.help-link:hover>span:first-child{transform:none!important}}
 
+
+@media(prefers-reduced-motion:reduce){dialog::backdrop{animation:none!important}}
+
+[hidden]{display:none!important}

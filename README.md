@@ -76,7 +76,7 @@ Entry switches use `POST /api/{kind}/{id}/toggle` with an explicit JSON body suc
 as `{"is_enabled": false}`. Values must be booleans; empty or ambiguous requests
 are rejected. This makes repeat requests safe across stale tabs and retries.
 Reopen already-running tabs after upgrading from the old implicit-toggle API.
-The reply test previews saved FAQ / standard answers only; it does not run AI,
+The reply test previews saved FAQ / standard answers only; it does not run Automation, AI,
 sleep or scheduler logic or send messages.
 
 The runner explicitly uses one Uvicorn worker. Rate and membership caches are
@@ -110,7 +110,7 @@ Continuous checks run in [GitHub Actions](https://github.com/TheBigChanges/AutoR
 on every push and pull request (`.github/workflows/ci.yml`): Python3.13/3.14
 API/auth/security tests, Node22 syntax/catalog/API-client tests, the real
 PostgreSQL18 contract suite against the exact Docker-pinned bot source, and
-nine Playwright/Chromium browser suites against an isolated local FastAPI server. Actions
+ten Playwright/Chromium browser suites against an isolated local FastAPI server. Actions
 are pinned to full official release commit SHAs and jobs have read-only repository access.
 No production token or database credential is required.
 
@@ -154,3 +154,45 @@ Chromium and starts/stops its own local server, selects a free local port, strip
 production connection credentials and bounds each suite to180 seconds. It tests
 demo/mocked authenticated APIs, not real production Telegram accounts. Test-only
 browser dependencies are not installed in the Render image.
+
+
+### Automation Engine
+
+The Automation section uses the bot's existing `automation_rules` table and
+original `automation.py` validator. Plus, Pro and Ultra each allow 20 rules;
+Free is locked, including direct API calls. Expired subscriptions fall back to
+Free. Saved rules remain in the bot database after downgrade.
+
+Create a keyword/phrase rule with an optional priority (0–10000, lower runs
+first). Review its name, keyword and exact reply, then **Confirm and enable**.
+New rules are immediately enabled, as in the bot panel. Search, pause/resume
+and delete rules from the same owner-scoped list. Deletion requires a separate
+one-use confirmation that expires after two minutes; opening a newer confirmation
+invalidates the older one. The UI and API support Uzbek, Russian and English.
+
+Matching is whole-word/phrase by default. A final `*` enables a last-word prefix
+of at least three normalized characters (`narx*` matches `narxi`); keywords allow
+up to five words / 50 characters and replies up to 500 characters. Negations
+suppress matching. In ordinary Offline mode, the bot checks Automation before
+FAQ, AI and standard fallback. Automation is bypassed during sleep or active
+schedules, and respects cooldown, Business permissions and manual owner activity.
+The existing reply-preview dialog intentionally tests only FAQ/standard replies.
+
+Deploy/start the updated **bot** first so its own migration creates the table.
+The Web App never runs bot migrations or polling. If this table is missing,
+authenticated bootstrap still works and Automation shows a setup notice;
+Automation writes fail closed with a localized 503. Docker pins the reviewed bot
+commit; CI fingerprints all five imported source modules, including Automation.
+
+`tests/test_automation_api.py` checks API permissions, bounded inputs, explicit
+state, missing migration and one-use deletion. The real PostgreSQL integration
+suite also tests original keyword matching, ownership, expiry and concurrent
+last-slot creation on every paid plan. `tests/browser_automation.py` covers
+review-before-save, duplicate prevention, failed/pending controls, stale dialogs,
+search, mobile navigation, three locales, four widths, glass and reduced motion.
+It is included in the normal browser CI harness.
+
+Deletion confirmations, like the existing limiter, are local to the single
+Web App process. Restarting it invalidates outstanding confirmations safely.
+A deployment with multiple instances needs a shared confirmation store before
+scaling; otherwise requests may be rejected and require a fresh confirmation.

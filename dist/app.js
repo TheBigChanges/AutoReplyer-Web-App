@@ -1,5 +1,5 @@
 import { tr, getLanguage, getLocale, setLanguage, normalizeLanguage, weekDays, translateChrome, languageSelector } from './i18n.js';
-import {animatePage, animateNotice, showDialog, closeDialog, initInteractions, updateMobileNavigation} from './interactions.js';
+import {animatePage, animateNotice, animateSurface, showDialog, closeDialog, initInteractions, updateMobileNavigation} from './interactions.js';
 import {requestJSON, trustedApiBase} from './api-client.js';
 import {storage} from './storage.js';
 import {createNavigation} from './navigation.js';
@@ -7,6 +7,7 @@ const appNavigation = createNavigation();
 const paths = {
   reply: 'M9 10V4L2 11l7 7v-6h5c4 0 6 3 6 7 3-9-1-13-11-13',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+  automation: 'M4 3h6v6H4z M14 15h6v6h-6z M7 9v8h7 M10 6h7v9',
   message: 'M21 11a8 8 0 0 1-8 8H6l-4 3V11a9 9 0 0 1 19 0Z M7 8h10 M7 12h7',
   sparkles: 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z M20 2v4 M18 4h4',
   book: 'M12 5C8 2 4 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-3-1-7-2-10 1Z M12 5v16',
@@ -49,7 +50,7 @@ const num = n => Number(n || 0).toLocaleString(getLocale());
 const time = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
 const minutes = s => s.split(':').reduce((h, m) => Number(h) * 60 + Number(m));
 let days = weekDays();
-const navigationKeys = [['dashboard', 'dashboard', 'Umumiy ko‘rinish'], ['replies', 'message', 'Avtojavob'], ['ai', 'sparkles', 'AI yordamchi', 'ULTRA'], ['faq', 'book', 'Smart FAQ'], ['knowledge', 'book', 'Bilimlar bazasi'], ['scheduler', 'calendar', 'Smart jadval'], ['analytics', 'chart', 'Statistika'], ['sleep', 'moon', 'Uyqu rejimi'], ['profile', 'clock', 'Profil vositalari'], ['settings', 'settings', 'Sozlamalar']];
+const navigationKeys = [['dashboard', 'dashboard', 'Umumiy ko‘rinish'], ['replies', 'message', 'Avtojavob'], ['ai', 'sparkles', 'AI yordamchi', 'ULTRA'], ['faq', 'book', 'Smart FAQ'], ['automation', 'automation', 'Avtomatlashtirish'], ['knowledge', 'book', 'Bilimlar bazasi'], ['scheduler', 'calendar', 'Smart jadval'], ['analytics', 'chart', 'Statistika'], ['sleep', 'moon', 'Uyqu rejimi'], ['profile', 'clock', 'Profil vositalari'], ['settings', 'settings', 'Sozlamalar']];
 const tg = window.Telegram?.WebApp;
 let apiBase = storage.getItem('ar-api') || '';
 let mode = tg?.initData ? 'loading' : 'demo',
@@ -124,6 +125,7 @@ const seed = {
     text: 'Bugun dam olish kuni. Xabaringizga keyingi ish kunida javob beraman.',
     is_enabled: true
   }],
+  automation: [{id: 1, name: 'Narxlar haqida', conditions: {operator: 'all', items: [{type: 'keyword_contains', value: 'narx*'}]}, action: {type: 'send_reply', text: 'Assalomu alaykum! Qaysi xizmat narxini bilmoqchisiz?'}, priority: 100, is_enabled: true}],
   ai_usage: 18
 };
 let state;
@@ -134,9 +136,12 @@ try {
 }
 // Recover malformed demo storage before rendering either account mode.
 if (typeof state?.user?.first_name !== 'string' || !state?.settings || !['faq', 'knowledge', 'schedules'].every(key => Array.isArray(state[key]))) state = structuredClone(seed);
+if (!Array.isArray(state.automation)) state.automation = [];
 let renderedKey;
 let summaryRequest = 0;
 let connectionRequest = 0;
+let deleteRequest = 0;
+const pendingAutomation = new Set();
 const pendingForms = new WeakSet();
 const pendingMainForms = new Map();
 const pendingChanges = new Map();
@@ -177,6 +182,7 @@ async function loadLive() {
   const loaded = await api('/api/bootstrap');
   if (request !== connectionRequest) return;
   state = loaded;
+  if (!Array.isArray(state.automation)) state.automation = [];
   summaryRequest++;
   // An explicit Web App choice wins; otherwise start in the bot's saved language.
   const initialLanguage = normalizeLanguage(storage.getItem('ar-language')) || normalizeLanguage(state.language);
@@ -298,7 +304,7 @@ function dashboard() {
     1: String(summary.peak[1]).padStart(2, '0')
   })}` : tr("Hozircha ma’lumot yo‘q"))}</section><div class="dashboard-grid"><section class="card"><div class="card-head"><h2>${tr("Xabarlar faolligi")}</h2>${periodButtons()}</div><p class="card-desc">${tr("Muloqotlaringiz qanday kechayotganini kuzating.")}</p><div class="chart-legend"><span><b></b>${tr("Kelgan xabarlar")}</span><span><b></b>${tr("Yuborilgan javoblar")}</span></div>${chart(summary)}<div class="chart-footer"><span>${tr("Har bir xabar — yangi imkoniyat.")}</span><a class="green-link" href="#analytics">${tr("Batafsil statistika ↗")}</a></div></section><section class="card"><div class="card-head"><h2>${tr("Javoblar taqsimoti")}</h2><span class="badge gray">${period === 1 ? tr("Bugun") : `${tr("{0} kun", {
     0: period
-  })}`}</span></div><p class="card-desc">${tr("Sizga qaysi yordamchi ko‘proq ko‘maklashmoqda?")}</p>${donut(summary)}<div class="note">${icon('shield')} ${tr("Statistika xabarlar matnini saqlamaydi. Faqat umumiy hisoblagichlar.")}</div></section></div><section class="card"><div class="card-head"><h2>${tr("Tezkor amallar")}</h2><span class="subtitle">${tr("Bir qadamda boshqaring")}</span></div><div class="quick-grid">${[['replies', 'message', tr("Javob matni"), tr("Xabaringizni tahrirlang")], ['ai', 'sparkles', tr("AI yordamchi"), tr("Aqlli muloqotni sozlang")], ['faq', 'book', tr("Yangi FAQ"), tr("Tayyor javob qo‘shing")], ['scheduler', 'calendar', tr("Jadval qo‘shish"), tr("Vaqtni rejalashtiring")]].map(([href, ic, t, s]) => `<a class="quick-item" href="#${href}"><span class="quick-icon">${icon(ic)}</span><div><strong>${t}</strong><small>${s}</small></div><span>↗</span></a>`).join('')}</div></section><div class="lower-grid"><section class="card"><div class="card-head"><h2>${tr("Avtomatlashtirish holati")}</h2><a class="green-link" href="#settings">${tr("Boshqarish ↗")}</a></div>${featureRow('sparkles', tr("AI yordamchi"), tr("Mijoz tilida, sizning nomingizdan"), switchControl('ai_enabled', tr("AI yordamchi")))}${featureRow('moon', tr("Uyqu rejimi"), `${time(state.settings.sleep_start_minutes)} — ${time(state.settings.sleep_end_minutes)} · ${e(state.settings.name_clock_tz || 'Asia/Tashkent')}`, switchControl('sleep_mode_enabled', tr("Uyqu rejimi")))}${featureRow('calendar', tr("Smart jadval"), `${tr("{0} ta faol jadval", {
+  })}`}</span></div><p class="card-desc">${tr("Sizga qaysi yordamchi ko‘proq ko‘maklashmoqda?")}</p>${donut(summary)}<div class="note">${icon('shield')} ${tr("Statistika xabarlar matnini saqlamaydi. Faqat umumiy hisoblagichlar.")}</div></section></div><section class="card"><div class="card-head"><h2>${tr("Tezkor amallar")}</h2><span class="subtitle">${tr("Bir qadamda boshqaring")}</span></div><div class="quick-grid">${[['replies', 'message', tr("Javob matni"), tr("Xabaringizni tahrirlang")], ['ai', 'sparkles', tr("AI yordamchi"), tr("Aqlli muloqotni sozlang")], ['faq', 'book', tr("Yangi FAQ"), tr("Tayyor javob qo‘shing")], ['automation', 'automation', tr("Yangi qoida"), tr("Kalit so‘zdan tayyor javobga")], ['scheduler', 'calendar', tr("Jadval qo‘shish"), tr("Vaqtni rejalashtiring")]].map(([href, ic, t, s]) => `<a class="quick-item" href="#${href}"><span class="quick-icon">${icon(ic)}</span><div><strong>${t}</strong><small>${s}</small></div><span>↗</span></a>`).join('')}</div></section><div class="lower-grid"><section class="card"><div class="card-head"><h2>${tr("Avtomatlashtirish holati")}</h2><a class="green-link" href="#settings">${tr("Boshqarish ↗")}</a></div>${featureRow('sparkles', tr("AI yordamchi"), tr("Mijoz tilida, sizning nomingizdan"), switchControl('ai_enabled', tr("AI yordamchi")))}${featureRow('moon', tr("Uyqu rejimi"), `${time(state.settings.sleep_start_minutes)} — ${time(state.settings.sleep_end_minutes)} · ${e(state.settings.name_clock_tz || 'Asia/Tashkent')}`, switchControl('sleep_mode_enabled', tr("Uyqu rejimi")))}${featureRow('calendar', tr("Smart jadval"), `${tr("{0} ta faol jadval", {
     0: state.schedules.filter(r => r.is_enabled).length
   })}`, switchControl('scheduler_enabled', tr("Smart jadval")))}</section><section class="card"><div class="card-head"><h2>${tr("Sizning hisobingiz")}</h2><span class="badge purple">${e(state.plan.toUpperCase())}</span></div>${featureRow('shield', 'Telegram Business', state.connection?.is_enabled ? tr("Hisob ulangan, javob berishga tayyor") : tr("Hali ulanmagan"), `<span class="badge ${state.connection?.is_enabled ? '' : 'gray'}">${state.connection?.is_enabled ? tr("Ulangan") : tr("Ulanmagan")}</span>`)}${featureRow('sparkles', tr("AI kunlik limiti"), `${tr("{0} / 50 ta javob", {
     0: state.ai_usage || 0
@@ -341,6 +347,27 @@ function entryHTML(item, kind) {
     0: e(kb ? item.title : item.question)
   })}" data-toggle="${kind}:${item.id}" ${item.is_enabled ? 'checked' : ''}><span></span></label></div></article>`;
 }
+function automation() {
+  const allowed = ['plus', 'pro', 'ultra'].includes(state.plan);
+  const items = state.automation;
+  const ready = state.automation_available !== false;
+  const intro = head(tr("Avtomatlashtirish"), tr("Kerakli so‘z. Kerakli javob. Hammasi siz belgilagandek."), allowed ? (ready ? button(tr("Qoida qo‘shish"), 'add-automation', 'plus', 'primary') : '') : `<a class="button primary" href="#plans">${icon('crown')}${tr("Tariflarni ko‘rish")}</a>`);
+  if (!allowed) return intro + `<section class="card automation-intro empty">${icon('shield')}<span class="badge">PLUS · PRO · ULTRA</span><h2>${tr("Qoidalaringiz uchun yangi imkoniyat")}</h2><p>${tr("Avtomatlashtirish Plus, Pro va Ultra’da mavjud. Har birida 20 tagacha qoida. Free’ga o‘tsangiz, qoidalar saqlanadi, ammo ishlamaydi.")}</p><a class="green-link" href="#plans">${tr("Tariflarni ko‘rish ↗")}</a></section>`;
+  if (!ready) return intro + `<section class="card empty">${icon('clock')}<h2>${tr("Bot yangilanishi kutilmoqda")}</h2><p>${tr("Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botni ochish")}</a></section>`;
+  return intro + `<section class="card automation-intro"><div class="card-head"><span class="badge">AUTOMATION ENGINE · 1.0</span><span class="badge gray">${items.length} / 20</span></div><div class="automation-flow"><div><span class="eyebrow">${tr("AGAR")}</span><h2>${tr("Xabarda kalit so‘z bo‘lsa")}</h2><span class="chip">narx*</span></div><span class="automation-connector">${icon('arrow')}</span><div><span class="eyebrow">${tr("UNDA")}</span><h2>${tr("Siz yozgan javob yuboriladi")}</h2><small>${tr("AI so‘rovisiz. Bitta xabarga bitta qoida.")}</small></div></div><p class="hint">${tr("Faqat Offline rejimida ishlaydi. Uyqu rejimi yoki faol jadval vaqtida ishlamaydi. Cooldown va Telegram ruxsatlari saqlanadi.")}</p><p class="hint">${tr("Inkor so‘zli xabarlarga mos kelmaydi. Offline rejimida: Automation → FAQ → AI → oddiy javob.")}</p><a class="green-link" href="#replies">${tr("Avtojavobni sozlash")}${icon('arrow')}</a></section><section class="card"><div class="card-head"><h2>${tr("Mening qoidalarim")}</h2><span class="subtitle">${tr("Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.")}</span></div><div class="list-toolbar"><input class="search" type="text" id="entry-search" aria-label="${tr("Qidirish")}" placeholder="${tr("Qoida yoki kalit so‘zni qidiring…")}"><span class="badge gray">PLUS · PRO · ULTRA</span></div><div id="entry-list">${items.map(automationHTML).join('') || `<div class="empty">${icon('automation')}<h3>${tr("Birinchi qoidangizni yarating")}</h3><p>${tr("Masalan, narx* so‘ziga o‘zingizning javobingizni ulang.")}</p>${button(tr("Qoida qo‘shish"), 'add-automation', 'plus')}</div>`}</div><p class="hint" id="no-results" hidden>${tr("Qidiruvga mos natija topilmadi.")}</p></section>`;
+}
+function automationHTML(item) {
+  const keyword = item.conditions?.items?.[0]?.value || '';
+  const text = item.action?.text || '';
+  return `<article class="entry automation-rule ${item.is_enabled ? '' : 'is-paused'}" data-search="${e([item.name, keyword, text].join(' ').toLowerCase())}"><div class="entry-title"><h3>${icon('automation')}${e(item.name)}</h3><span class="badge ${item.is_enabled ? '' : 'gray'}">${item.is_enabled ? tr("Faol") : tr("Pauzada")}</span></div><div class="chips"><span class="chip">${e(keyword)}</span><span class="chip">${tr("Ustuvorlik")}: ${e(item.priority)}</span></div><p class="automation-answer">${e(text)}</p><div class="entry-actions">${button(tr("O‘chirish"), `delete-automation:${item.id}`, 'trash', 'small danger')}<label class="switch"><input type="checkbox" aria-label="${e(tr("{0} holati", {0: item.name}))}" data-toggle="automation:${item.id}" ${item.is_enabled ? 'checked' : ''}><span></span></label></div></article>`;
+}
+function automationEditor() {
+  if (state.automation_available === false) return;
+  if (pendingAutomation.has(accountKey())) return;
+  if (!['plus', 'pro', 'ultra'].includes(state.plan)) { toast(tr("Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.")); return; }
+  if (state.automation.length >= 20) { toast(tr("Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.")); return; }
+  modal(`${modalHead(tr("Yangi qoida"))}<form id="automation-form"><div id="automation-fields"><label class="field"><span>${tr("Qoida nomi")}</span><input name="name" maxlength="60" required></label><label class="field"><span>${tr("Kalit so‘z yoki ibora")}</span><input name="keyword" maxlength="50" placeholder="narx*" required><small>${tr("1–5 so‘z, 50 belgigacha. narx — butun so‘z; narx* — narxi, narxlar. * oldidagi oxirgi so‘z kamida 3 harf bo‘lsin.")}</small></label><label class="field"><span>${tr("Tayyor javob")}</span><textarea name="reply" maxlength="500" required></textarea></label><label class="field"><span>${tr("Ustuvorlik")}</span><input name="priority" type="number" min="0" max="10000" step="1" value="100" required><small>${tr("Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.")}</small></label></div><section id="automation-review" class="automation-review" hidden><span class="badge">${tr("Saqlashdan oldin tekshiring")}</span><h3 id="automation-review-name"></h3><span class="chip" id="automation-review-keyword"></span><p class="chat-bubble" id="automation-review-reply"></p><p class="hint">${tr("Saqlangach qoida darhol yoqiladi. Uni istalgan payt pauzaga qo‘yishingiz mumkin.")}</p></section><p class="error-text" id="form-error" role="alert"></p><div class="save-row"><button class="button" type="button" data-action="automation-back" hidden>${tr("Tahrirlash")}</button><button class="button primary" type="submit">${icon('arrow')}${tr("Davom etish")}</button></div></form>`);
+}
 function scheduler() {
   return head(tr("Smart jadval"), tr("Javoblar kerakli vaqtda, har hafta avtomatik ishga tushadi."), button(tr("Jadval qo‘shish"), 'add-schedule', 'plus', 'primary')) + `<section class="card"><div class="card-head"><h2>${tr("Haftalik jadvallar")} <span class="badge gray">${state.schedules.length} / ${{
     free: 1,
@@ -368,7 +395,7 @@ function profile() {
   })}</div></div><p class="note">${tr("BIO’ni tahrirlash uchun Telegram Business ruxsati kerak. Tadbir va tug‘ilgan kun bot ichida tanlanadi.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botda sozlash")}</a></section></div>`;
 }
 function plans() {
-  return head(tr("Sizga mos tarif"), tr("Kichik qadamdan katta imkoniyatlargacha.")) + `<div class="plans-grid">${[['free', 'Free', '0', [tr("Oddiy avtojavob va uyqu rejimi"), tr("1 ta haftalik jadval"), tr("Bugungi statistika"), tr("Standart ism soati")]], ['plus', 'Plus', '2 000', [tr("15 ta Smart FAQ"), tr("3 ta haftalik jadval"), tr("Shaxsiy javob matnlari"), tr("7 kunlik statistika"), tr("Reklamasiz foydalanish")]], ['pro', 'Pro', '5 000', [tr("30 ta Smart FAQ"), tr("10 ta haftalik jadval"), tr("30 kunlik statistika"), tr("BIO hisoblagich"), tr("Qo‘shimcha vaqt zonalari")]], ['ultra', 'Ultra', '10 000', [tr("65 ta Smart FAQ"), tr("30 ta haftalik jadval"), tr("Kuniga 50 ta AI javob"), tr("55 ta bilimlar yozuvi"), tr("Barcha statistika grafiklari"), tr("Qo‘shimcha soat shriftlari")]]].map(([key, title, price, features]) => `<section class="card plan-card ${key === 'ultra' ? 'recommended' : ''}"><div class="card-head"><h2>${title}</h2>${state.plan === key ? `<span class="badge">${tr("Joriy tarif")}</span>` : ''}</div><div class="price">${price}<small> ${tr("so‘m")}</small></div><span class="subtitle">${tr("oyiga")}</span><ul>${features.map(f => `<li>${f}</li>`).join('')}</ul><a class="button ${key === 'ultra' ? 'primary' : ''}" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botda ko‘rish ↗")}</a></section>`).join('')}</div><p class="note" style="margin-top:22px">${tr("Tarif bot ichida to‘lov tasdig‘ini administratorga yuborish orqali faollashtiriladi. Yakuniy narx va amaldagi tarifni botdan tekshiring.")}</p>`;
+  return head(tr("Sizga mos tarif"), tr("Kichik qadamdan katta imkoniyatlargacha.")) + `<div class="plans-grid">${[['free', 'Free', '0', [tr("Oddiy avtojavob va uyqu rejimi"), tr("1 ta haftalik jadval"), tr("Bugungi statistika"), tr("Standart ism soati")]], ['plus', 'Plus', '2 000', [tr("15 ta Smart FAQ"), tr("20 ta avtomatlashtirish qoidasi"), tr("3 ta haftalik jadval"), tr("Shaxsiy javob matnlari"), tr("7 kunlik statistika"), tr("Reklamasiz foydalanish")]], ['pro', 'Pro', '5 000', [tr("30 ta Smart FAQ"), tr("20 ta avtomatlashtirish qoidasi"), tr("10 ta haftalik jadval"), tr("30 kunlik statistika"), tr("BIO hisoblagich"), tr("Qo‘shimcha vaqt zonalari")]], ['ultra', 'Ultra', '10 000', [tr("65 ta Smart FAQ"), tr("20 ta avtomatlashtirish qoidasi"), tr("30 ta haftalik jadval"), tr("Kuniga 50 ta AI javob"), tr("55 ta bilimlar yozuvi"), tr("Barcha statistika grafiklari"), tr("Qo‘shimcha soat shriftlari")]]].map(([key, title, price, features]) => `<section class="card plan-card ${key === 'ultra' ? 'recommended' : ''}"><div class="card-head"><h2>${title}</h2>${state.plan === key ? `<span class="badge">${tr("Joriy tarif")}</span>` : ''}</div><div class="price">${price}<small> ${tr("so‘m")}</small></div><span class="subtitle">${tr("oyiga")}</span><ul>${features.map(f => `<li>${f}</li>`).join('')}</ul><a class="button ${key === 'ultra' ? 'primary' : ''}" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botda ko‘rish ↗")}</a></section>`).join('')}</div><p class="note" style="margin-top:22px">${tr("Tarif bot ichida to‘lov tasdig‘ini administratorga yuborish orqali faollashtiriladi. Yakuniy narx va amaldagi tarifni botdan tekshiring.")}</p>`;
 }
 function settings() {
   return head(tr("Sozlamalar"), tr("Hisobingiz va Web App ulanishini boshqaring.")) + `<div class="form-grid"><div class="form-stack"><section class="card"><h2>Telegram Business</h2>${featureRow('shield', tr("Hisob holati"), mode === 'live' ? state.connection?.is_enabled ? tr("Telegram Business ulangan") : tr("Business hisobini botga ulang") : tr("Hozir namoyish hisobi ochilgan"), `<span class="badge ${mode === 'live' ? '' : 'gray'}">${mode === 'live' ? tr("Haqiqiy hisob") : tr("Demo")}</span>`)}<p class="hint">${tr("Telegram → Sozlamalar → Telegram Business → Chatbotlar → @autoreplyer_dbot. Xabarlarga javob berish ruxsatini bering.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botni ochish")}</a></section><form class="card" id="connection-form"><h2>${tr("Web App ulanishi")}</h2><label class="field"><span>${tr("API server manzili")}</span><input type="url" name="api" value="${e(apiBase)}" placeholder="https://api.example.com"><small>${tr("Alohida API serveringiz manzili. Web App va API bir serverda bo‘lsa, bo‘sh qoldiring. Bot tokenini bu yerga kiritmang.")}</small></label><p class="note">${tr("Haqiqiy hisobga kirish uchun ilovani Telegram bot menyusidan oching. Telegram tasdiqlagan ma’lumot serverda tekshiriladi.")}</p><div class="save-row"><button class="button primary" type="submit">${icon('shield')}${tr("Ulanishni tekshirish")}</button></div></form></div><div class="form-stack"><section class="card"><h2>${tr("Ko‘rinish")}</h2>${featureRow('moon', tr("Tungi rang mavzusi"), tr("Qurilmada saqlanadi."), button(tr("Almashtirish"), 'theme', 'moon', 'small'))}${featureRow('globe', tr("Interfeys tili"), tr("Tanlov shu qurilmada saqlanadi."), languageSelector("settings-language"))}</section><section class="card"><h2>${tr("Ma’lumotlar")}</h2><p class="hint">${mode === 'demo' ? tr("Demo sozlamalari faqat shu brauzerda saqlanadi. Ular haqiqiy botingizga ta’sir qilmaydi.") : tr("Sozlamalar Telegram hisobingiz bilan bog‘langan umumiy bot bazasiga saqlanadi.")}</p>${mode === 'demo' ? button(tr("Demo ma’lumotlarini tiklash"), 'reset-demo', 'reply') : `<span class="badge">${tr("Telegram orqali tasdiqlangan")}</span>`}</section></div></div>`;
@@ -380,6 +407,7 @@ function render() {
   const route = location.hash.slice(1) || 'dashboard';
   const key = `${route}:${mode}:${state.user.id}`;
   const drafts = renderedKey === key ? captureDrafts() : [];
+  const searchValue = renderedKey === key ? document.querySelector('#entry-search')?.value : '';
   renderedKey = key;
   translateChrome();
   document.querySelector('#language-control').innerHTML = languageSelector('header-language');
@@ -396,8 +424,8 @@ function render() {
   document.querySelector('#crumb').textContent = label;
   document.querySelector('#account-label').textContent = mode === 'live' ? `${state.user.first_name} · ${state.plan.toUpperCase()}` : tr("Namoyish hisobi");
   document.querySelector('.top-actions .avatar').textContent = state.user.first_name[0];
-  document.querySelector('#navigation').innerHTML = navigation.map(([key, ic, t, b], i) => `${i === 8 ? `<div class="nav-divider"></div>` : ''}<a href="#${key}" class="${page === key ? 'active' : ''}" ${page === key ? 'aria-current="page"' : ''}>${icon(ic)}${t}${b ? `<span class="nav-badge">${b}</span>` : ''}</a>`).join('');
-  updateMobileNavigation(document.querySelector('#mobile-nav'), [navigation[0], navigation[1], navigation[5], navigation[6], navigation[9]].map(([key, ic, t]) => `<a href="#${key}" class="${page === key ? 'active' : ''}">${icon(ic)}<span class="mobile-nav-label">${key === 'dashboard' ? tr("Asosiy") : key === 'scheduler' ? tr("Jadval") : t}</span></a>`).join(''));
+  document.querySelector('#navigation').innerHTML = navigation.map(([key, ic, t, b], i) => `${key === 'profile' ? `<div class="nav-divider"></div>` : ''}<a href="#${key}" class="${page === key ? 'active' : ''}" ${page === key ? 'aria-current="page"' : ''}>${icon(ic)}${t}${b ? `<span class="nav-badge">${b}</span>` : ''}</a>`).join('');
+  updateMobileNavigation(document.querySelector('#mobile-nav'), ['dashboard', 'replies', 'scheduler', 'analytics', 'settings'].map(key => navigation.find(item => item[0] === key)).map(([key, ic, t]) => `<a href="#${key}" class="${page === key ? 'active' : ''}">${icon(ic)}<span class="mobile-nav-label">${key === 'dashboard' ? tr("Asosiy") : key === 'scheduler' ? tr("Jadval") : t}</span></a>`).join(''));
   const banner = document.querySelector('#mode-banner');
   banner.classList.toggle('live', mode === 'live');
   banner.innerHTML = mode === 'live' ? `<span>${icon('shield')}<strong>${tr("Telegram orqali tasdiqlangan")}</strong><span class="demo-note">${tr("— o‘zgarishlar bot hisobingizga saqlanadi.")}</span></span><a href="#settings">${tr("Hisob ↗")}</a>` : mode === 'error' ? `<span>${icon('shield')}<strong>${tr("Botga ulanish talab etiladi")}</strong></span><a href="#settings">${tr("Ulanishni sozlash ↗")}</a>` : `<span>${icon('flask')}<strong>${tr("Demo rejim")}</strong><span class="demo-note">${tr("— namunaviy ma’lumotlar. O‘zgarishlar faqat shu qurilmada saqlanadi.")}</span></span><a href="#settings">${tr("Botni ulash ↗")}</a>`;
@@ -418,6 +446,7 @@ function render() {
     ai,
     faq: () => entries('faq'),
     knowledge: () => entries('knowledge'),
+    automation,
     scheduler,
     analytics,
     profile,
@@ -431,6 +460,8 @@ function render() {
     if (pending) form.replaceWith(pending);
   }
   restoreDrafts(drafts);
+  const search = document.querySelector('#entry-search');
+  if (search && searchValue) { search.value = searchValue; filterEntries(searchValue); }
   restorePendingChanges();
   paintIcons();
   animatePage(document.querySelector('#main'), `${page}:${getLanguage()}`);
@@ -457,6 +488,7 @@ function restoreDrafts(drafts) {
   if (preview && editor) preview.textContent = editor.value;
 }
 function modal(content) {
+  deleteRequest++;
   document.querySelector('#modal-content').innerHTML = content;
   showDialog(document.querySelector('#modal'));
 }
@@ -485,7 +517,7 @@ function overlap(a, b) {
   return segments(a).some(([s, e]) => segments(b).some(([x, y]) => s < y && x < e));
 }
 function testModal() {
-  modal(`${modalHead(tr("FAQ va oddiy javob sinovi"))}<p class="hint">${tr("Faqat Smart FAQ va saqlangan oddiy javob tekshiriladi. AI, uyqu rejimi va jadval bu sinovga kirmaydi. Hech kimga xabar yuborilmaydi.")}</p><form id="test-form"><label class="field"><span>${tr("Mijoz xabari")}</span><input type="text" name="message" placeholder="${tr("Ish vaqtingiz qanday?")}" maxlength="1000" required></label><button class="button primary" type="submit">${icon('send')}${tr("Sinash")}</button></form><div id="test-result" style="margin-top:20px"></div>`);
+  modal(`${modalHead(tr("FAQ va oddiy javob sinovi"))}<p class="hint">${tr("Faqat Smart FAQ va saqlangan oddiy javob tekshiriladi. Automation, AI, uyqu rejimi va jadval bu sinovga kirmaydi. Hech kimga xabar yuborilmaydi.")}</p><form id="test-form"><label class="field"><span>${tr("Mijoz xabari")}</span><input type="text" name="message" placeholder="${tr("Ish vaqtingiz qanday?")}" maxlength="1000" required></label><button class="button primary" type="submit">${icon('send')}${tr("Sinash")}</button></form><div id="test-result" style="margin-top:20px"></div>`);
 }
 document.addEventListener('click', async event => {
   const el = event.target.closest('[data-action],[data-period]');
@@ -539,6 +571,17 @@ document.addEventListener('click', async event => {
       toast(tr("Demo tiklandi"));
       return;
     }
+    if (action === 'add-automation') { automationEditor(); return; }
+    if (action === 'automation-back') {
+      const form = el.form;
+      delete form.dataset.review;
+      form.querySelector('#automation-fields').hidden = false;
+      form.querySelector('#automation-review').hidden = true;
+      el.hidden = true;
+      form.querySelector('[type=submit]').innerHTML = `${icon('arrow')}${tr("Davom etish")}`;
+      form.elements.name.focus();
+      return;
+    }
     if (action?.startsWith('add-')) {
       if (!['demo', 'live'].includes(mode)) return;
       editor(action.slice(4));
@@ -551,7 +594,22 @@ document.addEventListener('click', async event => {
     }
     if (action?.startsWith('delete-')) {
       const [kind, id] = action.slice(7).split(':');
+      if (el.disabled) return;
+      const dialog = document.querySelector('#modal');
+      const request = ++deleteRequest;
+      let token;
+      if (kind === 'automation' && mode === 'live') {
+        if (el.disabled) return;
+        busy = true; el.disabled = true;
+        token = (await api(`/api/automation/${id}/delete-confirmation`, 'POST')).token;
+        if (request !== deleteRequest || !el.isConnected) return;
+      }
       modal(`${modalHead(tr("Yozuvni o‘chirish"))}<p class="hint">${tr("Ushbu yozuv o‘chiriladi. Davom etasizmi?")}</p><div class="save-row">${button(tr("Bekor qilish"), 'close-modal', 'close')}${button(tr("O‘chirish"), `confirm-delete:${kind}:${id}`, 'trash', 'danger')}</div>`);
+      const confirm = dialog.querySelector('[data-action^="confirm-delete:"]');
+      if (kind === 'automation') {
+        confirm.dataset.token = token || '';
+        dialog.querySelector('.hint').textContent = tr("Qoidani o‘chirasizmi? Bu amalni qaytarib bo‘lmaydi. Tasdiq 2 daqiqa amal qiladi.");
+      }
       return;
     }
     if (action?.startsWith('confirm-delete:')) {
@@ -560,7 +618,7 @@ document.addEventListener('click', async event => {
       el.disabled = true;
       el.setAttribute('aria-busy', 'true');
       const [, kind, id] = action.split(':');
-      if (mode === 'live') await api(`/api/${kind}/${id}`, 'DELETE');
+      if (mode === 'live') await api(`/api/${kind}/${id}`, 'DELETE', kind === 'automation' ? {token: el.dataset.token} : undefined);
       const key = kind === 'schedule' ? 'schedules' : kind;
       state[key] = state[key].filter(r => r.id !== Number(id));
       persist();
@@ -619,18 +677,19 @@ document.addEventListener('input', event => {
     const preview = document.querySelector('#reply-preview');
     if (preview) preview.textContent = el.value;
   }
-  if (el.id === 'entry-search') {
-    let visible = 0;
-    document.querySelectorAll('[data-search]').forEach(row => {
-      row.hidden = !row.dataset.search.includes(el.value.toLowerCase());
-      if (!row.hidden) visible++;
-    });
-    document.querySelector('#no-results').hidden = visible > 0;
-  }
+  if (el.id === 'entry-search') filterEntries(el.value);
 });
+function filterEntries(value) {
+  let visible = 0;
+  document.querySelectorAll('[data-search]').forEach(row => {
+    row.hidden = !row.dataset.search.includes(value.toLowerCase());
+    if (!row.hidden) visible++;
+  });
+  document.querySelector('#no-results').hidden = visible > 0;
+}
 document.addEventListener('submit', async event => {
   const form = event.target;
-  if (!['settings-form', 'entry-form', 'connection-form', 'test-form'].includes(form.id)) return;
+  if (!['settings-form', 'entry-form', 'connection-form', 'test-form', 'automation-form'].includes(form.id)) return;
   event.preventDefault();
   if (pendingForms.has(form)) return;
   if (form.id !== 'connection-form' && !['demo', 'live'].includes(mode)) return;
@@ -638,6 +697,7 @@ document.addEventListener('submit', async event => {
   const pendingKey = formKey(form);
   if (form.closest('#main')) pendingMainForms.set(pendingKey, form);
   const submittedLanguage = getLanguage();
+  const submittedAccount = accountKey();
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;
   submit.setAttribute('aria-busy', 'true');
@@ -683,6 +743,45 @@ document.addEventListener('submit', async event => {
         };
       }
       if (form.isConnected) form.nextElementSibling.innerHTML = `<span class="badge">${e(result.source)}</span><p class="chat-bubble" style="margin-top:12px">${e(result.text)}</p>`;
+      return;
+    }
+    if (form.id === 'automation-form') {
+      form.querySelector('#form-error').textContent = '';
+      const values = {name: String(data.get('name')).trim(), keyword: String(data.get('keyword')).trim(), reply: String(data.get('reply')).trim(), priority: Number(data.get('priority'))};
+      if (!values.name || !values.reply || !values.keyword) throw Error(tr("Maydonlarni to‘ldiring."));
+      const raw = values.keyword.endsWith('*') ? values.keyword.slice(0, -1) : values.keyword;
+      const words = raw.toLowerCase().replace(/[’‘ʻʼʹ'`´]/g, '').match(/[\p{L}\p{N}]+/gu) || [];
+      if (raw.includes('*') || !words.length || words.length > 5 || (values.keyword.endsWith('*') && [...words.at(-1)].length < 3)) throw Error(tr("Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi."));
+      const fingerprint = JSON.stringify(values);
+      if (form.dataset.review !== fingerprint) {
+        form.dataset.review = fingerprint;
+        form.querySelector('#automation-review-name').textContent = values.name;
+        form.querySelector('#automation-review-keyword').textContent = `${values.keyword} · ${tr("Ustuvorlik")}: ${values.priority}`;
+        form.querySelector('#automation-review-reply').textContent = values.reply;
+        form.querySelector('#automation-fields').hidden = true;
+        const review = form.querySelector('#automation-review');
+        review.hidden = false;
+        form.querySelector('[data-action=automation-back]').hidden = false;
+        submit.innerHTML = `${icon('save')}${tr("Tasdiqlash va yoqish")}`;
+        animateSurface(review);
+        submit.focus();
+        return;
+      }
+      if (pendingAutomation.has(submittedAccount)) return;
+      pendingAutomation.add(submittedAccount);
+      let rule;
+      if (mode === 'live') rule = await api('/api/automation', 'POST', values);
+      else {
+        if (state.automation.length >= 20) throw Error(tr("Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida."));
+        rule = {id: Date.now(), name: values.name, conditions: {operator: 'all', items: [{type: 'keyword_contains', value: values.keyword}]}, action: {type: 'send_reply', text: values.reply}, priority: values.priority, is_enabled: true};
+      }
+      if (submittedAccount !== accountKey()) return;
+      state.automation.push(rule);
+      state.automation.sort((a,b) => a.priority - b.priority || a.id - b.id);
+      persist();
+      if (form.isConnected) await closeDialog(document.querySelector('#modal'));
+      render();
+      toast(mode === 'demo' ? demoNotice("Demo qurilmada saqlandi") : tr("Saqlandi"));
       return;
     }
     if (form.id === 'entry-form') {
@@ -745,6 +844,7 @@ document.addEventListener('submit', async event => {
     const error = form.querySelector('#form-error');
     if (error) error.textContent = err.message;else toast(err.message);
   } finally {
+    if (form.id === 'automation-form') pendingAutomation.delete(submittedAccount);
     pendingForms.delete(form);
     pendingMainForms.delete(pendingKey);
     submit.disabled = false;
@@ -780,6 +880,7 @@ if (storage.getItem('ar-theme') === 'dark') document.documentElement.classList.a
 document.querySelector('#theme-button').dataset.icon = document.documentElement.classList.contains('dark') ? 'sun' : 'moon';
 document.querySelector('#theme-button').addEventListener('click', theme);
 window.addEventListener('hashchange', () => {
+  deleteRequest++;
   appNavigation.sync();
   render();
   window.scrollTo({

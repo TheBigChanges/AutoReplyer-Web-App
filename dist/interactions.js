@@ -191,6 +191,11 @@ export async function closeDialog(dialog) {
   dialog.close();
 }
 
+export function animateSurface(el) {
+  animate(el, [{opacity: 0, transform: 'translate3d(0,6px,0)'},
+               {opacity: 1, transform: 'translate3d(0,0,0)'}], {duration: motion.control});
+}
+
 export function animateNotice(el) {
   animate(el, [
     visualState(el),

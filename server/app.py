@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import sys
 import threading
 import time
@@ -19,6 +20,7 @@ from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from psycopg2.errors import UndefinedTable
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi import Path as PathParameter
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,7 +69,7 @@ def modules():
     with _module_lock:
         if _modules is None:
             root = Path(os.environ.get('AUTOREPLYER_SOURCE', '')).resolve()
-            if not os.environ.get('AUTOREPLYER_SOURCE') or not all((root / f).is_file() for f in ['db.py', 'logic.py', 'i18n.py', 'analytics.py']):
+            if not os.environ.get('AUTOREPLYER_SOURCE') or not all((root / f).is_file() for f in ['db.py', 'logic.py', 'i18n.py', 'analytics.py', 'automation.py']):
                 raise HTTPException(503, 'AUTOREPLYER_SOURCE yangi AutoReplyer kodi papkasiga ko‘rsatilishi kerak.')
             sys.path.insert(0, str(root))
             _modules = tuple(importlib.import_module(name) for name in ['db', 'logic', 'analytics'])
@@ -121,6 +123,17 @@ class Schedule(Input):
     start_min: int = Field(ge=0, le=1439, strict=True)
     end_min: int = Field(ge=0, le=1440, strict=True)
     text: str | None = Field(None, max_length=500)
+
+
+class AutomationRule(Input):
+    name: str = Field(min_length=1, max_length=60)
+    keyword: str = Field(min_length=1, max_length=50)
+    reply: str = Field(min_length=1, max_length=500)
+    priority: int = Field(100, ge=0, le=10000, strict=True)
+
+
+class DeleteConfirmation(Input):
+    token: str = Field(min_length=43, max_length=43, pattern=r'^[A-Za-z0-9_-]+$')
 
 
 class EntryState(Input):
@@ -188,7 +201,7 @@ def plan(uid):
 
 def require(uid, feature):
     p = plan(uid)
-    allowed = {'custom': ['plus', 'pro', 'ultra'], 'faq': ['plus', 'pro', 'ultra'], 'knowledge': ['ultra'], 'ai': ['ultra'], '7': ['plus', 'pro', 'ultra'], '30': ['pro', 'ultra']}
+    allowed = {'custom': ['plus', 'pro', 'ultra'], 'automation': ['plus', 'pro', 'ultra'], 'faq': ['plus', 'pro', 'ultra'], 'knowledge': ['ultra'], 'ai': ['ultra'], '7': ['plus', 'pro', 'ultra'], '30': ['pro', 'ultra']}
     if p not in allowed.get(feature, ()):
         raise HTTPException(403, 'Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.')
     return p
@@ -240,9 +253,18 @@ def bootstrap(user: User):
         raise HTTPException(503, 'AutoReplyer kodi versiyasi mos emas.')
     zone = user_zone(settings)
     bot_language = db.get_user_lang(uid)
+    current_plan = plan(uid)
+    rules, automation_available = [], True
+    if current_plan != 'free':
+        try:
+            rules = automation_db_call(db.list_automation_rules, uid)
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            automation_available = False
     return {'user': {'id': uid, 'first_name': user.get('first_name', 'Foydalanuvchi')},
             'language': bot_language if bot_language in ('uz', 'ru', 'en') else user.get('language_code', 'uz'),
-            'plan': plan(uid), 'connection': {k: connection.get(k) for k in ['is_enabled', 'can_reply']} if connection else None, 'settings': settings, 'faq': db.list_faq_entries(uid), 'knowledge': db.list_kb_entries(uid), 'schedules': db.list_schedule_rules(uid), 'ai_usage': db.get_ai_usage(uid, datetime.now(zone).date().isoformat())}
+            'plan': current_plan, 'connection': {k: connection.get(k) for k in ['is_enabled', 'can_reply']} if connection else None, 'settings': settings, 'faq': db.list_faq_entries(uid), 'knowledge': db.list_kb_entries(uid), 'schedules': db.list_schedule_rules(uid), 'automation': rules, 'automation_available': automation_available, 'ai_usage': db.get_ai_usage(uid, datetime.now(zone).date().isoformat())}
 
 
 @app.patch('/api/settings')
@@ -307,6 +329,76 @@ def edit_knowledge(entry_id: EntryId, body: Knowledge, user: User):
     return save_item('knowledge', body, user, entry_id)
 
 
+AUTOMATION_LIMIT = 20
+_automation_confirmations = {}
+_automation_lock = threading.Lock()
+
+
+def automation_db_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except UndefinedTable:
+        # The running bot owns schema upgrades. Keep other Web App sections usable
+        # when its new Automation migration has not been deployed yet.
+        raise HTTPException(503, 'Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.') from None
+
+
+def automation_engine():
+    modules()  # Establish the trusted, Docker-pinned import path first.
+    return importlib.import_module('automation')
+
+
+@app.post('/api/automation')
+def create_automation(body: AutomationRule, user: User):
+    uid = user['id']
+    require(uid, 'automation')
+    engine = automation_engine()
+    try:
+        clean = engine.make_keyword_rule(body.keyword, body.reply, body.name, body.priority)
+    except engine.AutomationError:
+        raise HTTPException(422, 'Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.') from None
+    db, _, _ = modules()
+    result = automation_db_call(db.add_automation_rule, uid, **clean, max_rules=AUTOMATION_LIMIT, enabled=True)
+    if result is None:
+        raise HTTPException(409, 'Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.')
+    return {'id': result, 'is_enabled': True, **clean}
+
+
+@app.post('/api/automation/{entry_id}/delete-confirmation')
+def automation_delete_confirmation(entry_id: EntryId, user: User):
+    uid = user['id']
+    require(uid, 'automation')
+    db, _, _ = modules()
+    if not any(row['id'] == entry_id for row in automation_db_call(db.list_automation_rules, uid)):
+        raise HTTPException(404, 'Yozuv topilmadi.')
+    now = time.monotonic()
+    token = secrets.token_urlsafe(32)
+    with _automation_lock:
+        for owner, (_, _, expiry) in list(_automation_confirmations.items()):
+            if expiry <= now:
+                del _automation_confirmations[owner]
+        if uid not in _automation_confirmations and len(_automation_confirmations) >= 10000:
+            raise HTTPException(503, 'Bir oz kutib, qayta urinib ko‘ring.')
+        # A newer confirmation replaces this owner's previous dialog.
+        _automation_confirmations[uid] = (entry_id, token, now + 120)
+    return {'token': token, 'expires_in': 120}
+
+
+@app.delete('/api/automation/{entry_id}')
+def delete_automation(entry_id: EntryId, body: DeleteConfirmation, user: User):
+    uid = user['id']
+    require(uid, 'automation')
+    with _automation_lock:
+        saved = _automation_confirmations.get(uid)
+        if not saved or saved[0] != entry_id or saved[2] <= time.monotonic() or not secrets.compare_digest(saved[1], body.token):
+            raise HTTPException(409, 'O‘chirish tasdig‘i eskirgan. Oynani qayta oching.')
+        del _automation_confirmations[uid]  # Consume once, including concurrent retries.
+    db, _, _ = modules()
+    if not automation_db_call(db.delete_automation_rule, uid, entry_id):
+        raise HTTPException(404, 'Yozuv topilmadi.')
+    return {'ok': True}
+
+
 def schedule_result(result):
     status, value = result
     if status == 'limit':
@@ -341,7 +433,7 @@ def edit_schedule(entry_id: EntryId, body: Schedule, user: User):
 
 
 @app.post('/api/{kind}/{entry_id}/toggle')
-def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: EntryId, body: EntryState, user: User):
+def toggle(kind: Literal['faq', 'knowledge', 'schedule', 'automation'], entry_id: EntryId, body: EntryState, user: User):
     db, _, _ = modules()
     uid = user['id']
     # Explicit state is idempotent across tabs, workers and retried requests.
@@ -349,6 +441,11 @@ def toggle(kind: Literal['faq', 'knowledge', 'schedule'], entry_id: EntryId, bod
     if kind == 'schedule':
         result = schedule_result(db.update_schedule_rule(uid, entry_id, is_enabled=body.is_enabled))
         return {**result, 'id': entry_id, 'is_enabled': body.is_enabled}
+    if kind == 'automation':
+        require(uid, 'automation')
+        if not automation_db_call(db.set_automation_rule_enabled, uid, entry_id, body.is_enabled):
+            raise HTTPException(404, 'Yozuv topilmadi.')
+        return {'is_enabled': body.is_enabled}
     item_limit(uid, kind)
     if not getattr(db, f'set_{item_prefix(kind)}_entry_enabled')(uid, entry_id, body.is_enabled):
         raise HTTPException(404, 'Yozuv topilmadi.')

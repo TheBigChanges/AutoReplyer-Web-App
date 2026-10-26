@@ -16,7 +16,7 @@ import tempfile
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = ('db.py', 'logic.py', 'analytics.py', 'i18n.py')
+MODULES = ('db.py', 'logic.py', 'analytics.py', 'i18n.py', 'automation.py')
 
 
 def docker_ref(dockerfile):

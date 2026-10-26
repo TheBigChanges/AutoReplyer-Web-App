@@ -1,5 +1,39 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
+Bot yangilanishi kutilmoqda|Ожидается обновление бота|Waiting for the bot update
+Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.|Сначала запустите новую версию бота. База автоматизации ещё не готова.|Start the updated bot first. The Automation database is not ready yet.
+Avtomatlashtirish|Автоматизация|Automation
+20 ta avtomatlashtirish qoidasi|20 правил автоматизации|20 automation rules
+Yangi qoida|Новое правило|New rule
+Kalit so‘zdan tayyor javobga|От ключевого слова к готовому ответу|From keyword to saved reply
+Kerakli so‘z. Kerakli javob. Hammasi siz belgilagandek.|Нужное слово. Нужный ответ. Всё по вашим правилам.|The right word. The right reply. Your rules.
+Qoida qo‘shish|Добавить правило|Add rule
+Qoidalaringiz uchun yangi imkoniyat|Новые возможности для ваших правил|More possibilities for your rules
+Avtomatlashtirish Plus, Pro va Ultra’da mavjud. Har birida 20 tagacha qoida. Free’ga o‘tsangiz, qoidalar saqlanadi, ammo ishlamaydi.|Автоматизация доступна на Plus, Pro и Ultra: до 20 правил на каждом тарифе. При переходе на Free правила сохраняются, но не работают.|Automation is available on Plus, Pro and Ultra: up to 20 rules on each plan. On Free, saved rules are kept but do not run.
+AGAR|ЕСЛИ|IF
+UNDA|ТО|THEN
+Xabarda kalit so‘z bo‘lsa|В сообщении есть ключевое слово|A message contains your keyword
+Siz yozgan javob yuboriladi|Отправляется ваш готовый ответ|Your saved reply is sent
+AI so‘rovisiz. Bitta xabarga bitta qoida.|Без запроса к ИИ. Одно правило на сообщение.|No AI request. One rule per message.
+Faqat Offline rejimida ishlaydi. Uyqu rejimi yoki faol jadval vaqtida ishlamaydi. Cooldown va Telegram ruxsatlari saqlanadi.|Работает только в режиме Offline, вне режима сна и активного расписания. Действуют cooldown и разрешения Telegram.|Runs only in Offline mode, outside sleep mode and active schedules. Cooldown and Telegram permissions still apply.
+Mening qoidalarim|Мои правила|My rules
+Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.|Меньший номер приоритета срабатывает первым; при равенстве выбирается более старое правило.|Lower priority numbers run first; ties go to the older rule.
+Qoida yoki kalit so‘zni qidiring…|Найти правило или ключевое слово…|Search rules or keywords…
+Birinchi qoidangizni yarating|Создайте первое правило|Create your first rule
+Masalan, narx* so‘ziga o‘zingizning javobingizni ulang.|Например, добавьте свой ответ для слова narx*.|For example, link narx* to your own reply.
+Ustuvorlik|Приоритет|Priority
+Qoida nomi|Название правила|Rule name
+Kalit so‘z yoki ibora|Ключевое слово или фраза|Keyword or phrase
+1–5 so‘z, 50 belgigacha. narx — butun so‘z; narx* — narxi, narxlar. * oldidagi oxirgi so‘z kamida 3 harf bo‘lsin.|1–5 слов, до 50 символов. narx — целое слово; narx* — narxi, narxlar. Последнее слово перед * — от 3 букв.|1–5 words, up to 50 characters. narx matches a whole word; narx* matches narxi, narxlar. The last word before * needs at least 3 letters.
+Saqlashdan oldin tekshiring|Проверьте перед сохранением|Review before saving
+Saqlangach qoida darhol yoqiladi. Uni istalgan payt pauzaga qo‘yishingiz mumkin.|После сохранения правило сразу включится. Его можно приостановить в любой момент.|Saving enables the rule immediately. You can pause it at any time.
+Tasdiqlash va yoqish|Подтвердить и включить|Confirm and enable
+Qoidani o‘chirasizmi? Bu amalni qaytarib bo‘lmaydi. Tasdiq 2 daqiqa amal qiladi.|Удалить правило? Это действие нельзя отменить. Подтверждение действует 2 минуты.|Delete this rule? This cannot be undone. Confirmation expires in 2 minutes.
+Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.|Достигнут лимит автоматизации: не более 20 правил.|Automation limit reached: at most 20 rules.
+Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.|Ключевое слово: 1–50 символов и 1–5 слов. * допускается только в конце после слова длиной от 3 букв.|Use 1–50 characters and 1–5 words. * is allowed only at the end, after a word of at least 3 letters.
+O‘chirish tasdig‘i eskirgan. Oynani qayta oching.|Подтверждение удаления устарело. Откройте окно заново.|Delete confirmation expired. Reopen the dialog.
+Bir oz kutib, qayta urinib ko‘ring.|Немного подождите и повторите попытку.|Wait a moment and try again.
+Inkor so‘zli xabarlarga mos kelmaydi. Offline rejimida: Automation → FAQ → AI → oddiy javob.|Сообщения с отрицанием не совпадают. В Offline: Automation → FAQ → ИИ → обычный ответ.|Messages containing negations do not match. In Offline mode: Automation → FAQ → AI → standard reply.
 Orqaga|Назад|Back
 O‘zgarishlar faqat shu oynada saqlandi.|Изменения сохранены только в этом окне.|Changes are saved only in this window.
 Til faqat shu oynada almashtirildi.|Язык изменён только в этом окне.|The language was changed only in this window.
@@ -314,7 +348,7 @@ Vergul bilan ajrating. Ko‘pi bilan 10 ta, har biri 40 belgigacha.|Раздел
 Tayyor javob|Готовый ответ|Saved answer
 Bekor qilish|Отмена|Cancel
 FAQ va oddiy javob sinovi|Тест FAQ и обычного ответа|FAQ and standard reply test
-Faqat Smart FAQ va saqlangan oddiy javob tekshiriladi. AI, uyqu rejimi va jadval bu sinovga kirmaydi. Hech kimga xabar yuborilmaydi.|Проверяются только Smart FAQ и сохранённый обычный ответ. ИИ, режим сна и расписание в этот тест не входят. Сообщения никому не отправляются.|Only Smart FAQ and the saved standard reply are tested. AI, sleep mode and schedules are outside this test. No messages are sent.
+Faqat Smart FAQ va saqlangan oddiy javob tekshiriladi. Automation, AI, uyqu rejimi va jadval bu sinovga kirmaydi. Hech kimga xabar yuborilmaydi.|Проверяются только Smart FAQ и сохранённый обычный ответ. Automation, ИИ, режим сна и расписание в этот тест не входят. Сообщения никому не отправляются.|Only Smart FAQ and the saved standard reply are tested. Automation, AI, sleep mode and schedules are outside this test. No messages are sent.
 Mijoz xabari|Сообщение клиента|Customer message
 Ish vaqtingiz qanday?|Каковы ваши часы работы?|What are your opening hours?
 Sinash|Проверить|Test

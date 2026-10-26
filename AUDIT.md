@@ -324,3 +324,56 @@ The old manual manifest-update requirement is replaced in CI:
 - The user's new pin is preserved. Upstream changes include BIO/name-clock
   state/helpers and translations; original bot repository code is unchanged by
   this Web App fix. Production schema migrations are not run by the adapter.
+
+
+## Automation integration — 2026-10-26
+
+Reviewed the original bot's Automation Engine v1.0 at
+`82c37864dca8a174c962b92c3c2c7b3861df7093` and updated only this Web App's
+Docker pin and adapter/frontend. The original bot repository is unchanged.
+This includes its current paid-plan-only access, 20-rule limit, keyword/prefix
+normalization, deterministic priority and enabled-on-confirmation panel behavior.
+
+- Added an Uzbek/Russian/English Automation section, owner-scoped bootstrap data,
+  review-before-enable creation, search, explicit pause/resume and confirmed
+  deletion. Uses the original validator and atomic advisory-lock insert helper;
+  arbitrary condition/action JSON and owner/plan fields cannot be posted.
+- Free/unknown/expired plans cannot create, toggle or delete Automation rules or
+  request confirmations. Free bootstrap hides retained Automation data. IDs,
+  names, keywords, reply lengths and integer priorities are bounded server-side.
+- Delete tokens are random 256-bit values, bound to owner and rule, expire after
+  120 seconds, replace older confirmations and are consumed under a lock before
+  deletion. Foreign-owner, wrong-rule, stale and concurrent replays fail closed.
+  DB helpers independently include the verified owner in their SQL predicates.
+- If the running bot has not created its new table yet, bootstrap remains usable;
+  the Automation section explains the required bot update, and writes return a
+  localized 503. No bot polling, production schema initialization or migration
+  is invoked by the adapter. CI verifies all five imported source modules.
+- New forms/cards use the existing premium themes, glass dialogs and cancellable
+  animation system. Fixed an existing CSS issue where author styles overrode
+  `hidden` (including empty search notices and hidden review controls). Reduced
+  motion now also suppresses `dialog::backdrop` CSS animations. Search survives
+  state/language rerenders. Saved owner text is escaped and remains untranslated.
+- The established reply-preview remains FAQ/standard-only, and explicitly says
+  Automation/AI/sleep/schedules are excluded. No Gemini call or Telegram send was
+  added. Bot delivery still follows the upstream runtime's Offline/sleep/schedule,
+  cooldown, connection, permissions and manual-owner-activity gates.
+
+Pre-publication checks, all passed:
+
+| Environment | Evidence |
+| --- | --- |
+| Python3.14 local | 63 unit/API/auth/security/source/deploy tests |
+| PostgreSQL18.6, disposable loopback DB | 11 real pinned-source integration tests; all three paid-plan 20-rule boundaries and parallel last-slot inserts, expiry, owner scope, keyword matching and existing nine contracts |
+| Local Chrome + isolated FastAPI/CSP | All 10 browser suites; new Automation suite covers review/duplicate save, pending and failed toggles, search, stale async confirmation, Free/schema gates, three locales/four widths, escaped text, glass and reduced motion |
+| Node | All browser module syntax, 384-message catalog and API trust/credential-redirect tests |
+| actionlint1.7.12 | Official checksum verified; both workflows clean |
+| pip-audit2.10.1 | 18 currently resolved runtime dependencies, no known vulnerabilities; refreshed docs/dependency-audit.json |
+
+Tests used synthetic identities and a throwaway PostgreSQL schema. No production
+Telegram account, credentials, DB writes or bot delivery were exercised. This
+is not a guarantee that every bug or vulnerability is absent. Docker itself was
+not available locally; the existing CI matrix targets Python3.13 and3.14.
+Deletion confirmations are process-local, matching the deployment's explicit
+single worker. A restart safely invalidates them; multiple instances need a
+shared store before scaling. Existing rate/membership cache limits remain.

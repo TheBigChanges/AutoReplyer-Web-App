@@ -19,7 +19,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 SUITES = ('browser_check', 'browser_i18n', 'browser_interactions', 'browser_audit',
           'browser_followup', 'browser_navigation', 'browser_motion',
-          'browser_entry_state', 'browser_design')
+          'browser_entry_state', 'browser_design', 'browser_automation')
 OUTPUT = ROOT / 'artifacts/browser-ci'
 
 

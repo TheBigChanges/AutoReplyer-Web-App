@@ -206,6 +206,65 @@ class UpstreamIntegrationTests(unittest.TestCase):
             self.assertIs(self.db.get_schedule_rule(self.uid,entry)['is_enabled'],desired)
         self.assertEqual(self.request('POST',f'/api/schedule/{entry}/toggle').status_code,422)
 
+    def test_automation_real_engine_crud_owner_scope_and_delete_confirmation(self):
+        engine = self.adapter.automation_engine()
+        body = {'name': 'Prices', 'keyword': 'narx*', 'reply': 'Own original answer 🌿', 'priority': 100}
+        created = self.request('POST', '/api/automation', json=body)
+        self.assertEqual(created.status_code, 200)
+        entry = created.json()['id']
+        rules = self.db.list_automation_rules(self.uid)
+        self.assertEqual(len(rules), 1)
+        self.assertIs(rules[0]['is_enabled'], True)
+        self.assertEqual(engine.find_matching_automation('Telefon narxi qancha?', rules)['id'], entry)
+        self.assertIsNone(engine.find_matching_automation('Narx emas', rules))
+        self.assertIsNone(engine.find_matching_automation('unarxon', rules))
+        # Exact words, phrases and deterministic priority use the original bot engine.
+        for keyword, message, expected in [('narx','narxi',False), ('ish vaqti','ISH VAQTI qanday?',True), ('O‘zbekiston','Ozbekiston',True)]:
+            rule = engine.make_keyword_rule(keyword, 'A')
+            self.assertEqual(engine.rule_matches(message, rule), expected)
+        second = self.request('POST', '/api/automation', json={**body, 'name':'First priority', 'priority':5}).json()['id']
+        self.assertEqual(engine.find_matching_automation('narxi', self.db.get_enabled_automation_rules(self.uid))['id'], second)
+        other = self.owner('ultra')
+        for desired in [False, False, True, True]:
+            result = self.request('POST', f'/api/automation/{entry}/toggle', json={'is_enabled': desired})
+            self.assertEqual(result.status_code, 200)
+            row = next(r for r in self.db.list_automation_rules(self.uid) if r['id'] == entry)
+            self.assertIs(row['is_enabled'], desired)
+        self.assertEqual(self.request('POST',f'/api/automation/{entry}/toggle',uid=other,json={'is_enabled':False}).status_code,404)
+        self.assertEqual(self.request('POST',f'/api/automation/{entry}/delete-confirmation',uid=other).status_code,404)
+        token = self.request('POST', f'/api/automation/{entry}/delete-confirmation').json()['token']
+        self.assertEqual(self.request('DELETE',f'/api/automation/{entry}',uid=other,json={'token':token}).status_code,409)
+        self.assertEqual(self.request('DELETE',f'/api/automation/{entry}',json={'token':token}).status_code,200)
+        self.assertEqual(self.request('DELETE',f'/api/automation/{entry}',json={'token':token}).status_code,409)
+        self.assertEqual([r['id'] for r in self.db.list_automation_rules(self.uid)],[second])
+        for bad in ['*','na*','na*rx','!!!','bir ikki uch tort besh olti']:
+            self.assertEqual(self.request('POST','/api/automation',json={**body,'keyword':bad}).status_code,422)
+
+    def test_automation_plan_expiry_and_atomic_last_slot_for_all_paid_plans(self):
+        engine = self.adapter.automation_engine()
+        body = {'name':'Boundary','keyword':'boundary','reply':'A','priority':100}
+        for plan in ['plus','pro','ultra']:
+            uid = self.owner(plan)
+            clean = engine.make_keyword_rule('seed','A')
+            for _ in range(19):
+                self.assertIsNotNone(self.db.add_automation_rule(uid,**clean,max_rules=20,enabled=True))
+            barrier = Barrier(2)
+            def create(_):
+                barrier.wait(timeout=5)
+                return self.request('POST','/api/automation',uid=uid,json=body).status_code
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                statuses = list(pool.map(create,range(2)))
+            self.assertEqual(sorted(statuses),[200,409],(plan,statuses))
+            self.assertEqual(self.db.count_automation_rules(uid),20)
+            self.assertEqual(len(self.request('GET','/api/bootstrap',uid=uid).json()['automation']),20)
+            self.db.set_user_plan(uid,plan,time.time()-60)
+            entry = self.db.list_automation_rules(uid)[0]['id']
+            self.assertEqual(self.request('POST','/api/automation',uid=uid,json=body).status_code,403)
+            self.assertEqual(self.request('POST',f'/api/automation/{entry}/toggle',uid=uid,json={'is_enabled':False}).status_code,403)
+            self.assertEqual(self.request('POST',f'/api/automation/{entry}/delete-confirmation',uid=uid).status_code,403)
+            self.assertEqual(self.request('GET','/api/bootstrap',uid=uid).json()['automation'],[])
+            self.assertEqual(self.db.count_automation_rules(uid),20)  # Retained after downgrade.
+
     def test_analytics_real_counters_periods_and_plan_payload(self):
         other=self.owner('ultra')
         for kind,n in [('incoming',13),('ai',2),('faq',3),('static',1),('sleep',1),('skipped',4)]:
