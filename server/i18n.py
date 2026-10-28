@@ -8,6 +8,9 @@ def language_code(value: str | None) -> str:
 
 
 MESSAGES = {
+    'Qoida shartlarini tekshiring.': ('Проверьте условия правила.', 'Check the rule conditions.'),
+    'Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.': ('Условия по дням и времени доступны только на Pro и Ultra.', 'Day and time conditions require Pro or Ultra.'),
+    'Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.': ('Достигнут лимит правил автоматизации вашего тарифа.', 'Your plan’s automation rule limit has been reached.'),
     'Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.': ('Сначала запустите новую версию бота. База автоматизации ещё не готова.', 'Start the updated bot first. The Automation database is not ready yet.'),
     'Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.': ('Достигнут лимит автоматизации: не более 20 правил.', 'Automation limit reached: at most 20 rules.'),
     'Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.': ('Ключевое слово: 1–50 символов и 1–5 слов. * допускается только в конце после слова длиной от 3 букв.', 'Use 1–50 characters and 1–5 words. * is allowed only at the end, after a word of at least 3 letters.'),

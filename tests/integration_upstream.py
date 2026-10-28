@@ -240,14 +240,28 @@ class UpstreamIntegrationTests(unittest.TestCase):
         for bad in ['*','na*','na*rx','!!!','bir ikki uch tort besh olti']:
             self.assertEqual(self.request('POST','/api/automation',json={**body,'keyword':bad}).status_code,422)
 
+    def test_automation_smart_overnight_and_plan_gate(self):
+        body={'name':'Night','keyword':'night','reply':'Night reply','days':[0],'time_range':{'start':1320,'end':360}}
+        for p in ['plus','pro','ultra']:
+            uid=self.owner(p)
+            r=self.request('POST','/api/automation',uid=uid,json=body)
+            self.assertEqual(r.status_code,403 if p=='plus' else 200)
+            if p=='plus': continue
+            rule=self.db.list_automation_rules(uid)[0]
+            engine=self.adapter.automation_engine()
+            for when,expected in [((0,1320),True),((1,359),True),((1,360),False),((0,1319),False),((2,60),False)]:
+                self.assertEqual(engine.rule_matches('night',rule,when=when),expected)
+            self.assertFalse(engine.rule_matches('night',rule,when=(0,1400),allow_smart=False))
+            self.assertEqual(self.request('POST','/api/automation',uid=uid,json={**body,'time_range':{'start':0,'end':0}}).status_code,422)
+
     def test_automation_plan_expiry_and_atomic_last_slot_for_all_paid_plans(self):
         engine = self.adapter.automation_engine()
         body = {'name':'Boundary','keyword':'boundary','reply':'A','priority':100}
-        for plan in ['plus','pro','ultra']:
+        for plan, limit in [('plus',2),('pro',10),('ultra',30)]:
             uid = self.owner(plan)
             clean = engine.make_keyword_rule('seed','A')
-            for _ in range(19):
-                self.assertIsNotNone(self.db.add_automation_rule(uid,**clean,max_rules=20,enabled=True))
+            for _ in range(limit-1):
+                self.assertIsNotNone(self.db.add_automation_rule(uid,**clean,max_rules=limit,enabled=True))
             barrier = Barrier(2)
             def create(_):
                 barrier.wait(timeout=5)
@@ -255,15 +269,15 @@ class UpstreamIntegrationTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 statuses = list(pool.map(create,range(2)))
             self.assertEqual(sorted(statuses),[200,409],(plan,statuses))
-            self.assertEqual(self.db.count_automation_rules(uid),20)
-            self.assertEqual(len(self.request('GET','/api/bootstrap',uid=uid).json()['automation']),20)
+            self.assertEqual(self.db.count_automation_rules(uid),limit)
+            self.assertEqual(len(self.request('GET','/api/bootstrap',uid=uid).json()['automation']),limit)
             self.db.set_user_plan(uid,plan,time.time()-60)
             entry = self.db.list_automation_rules(uid)[0]['id']
             self.assertEqual(self.request('POST','/api/automation',uid=uid,json=body).status_code,403)
             self.assertEqual(self.request('POST',f'/api/automation/{entry}/toggle',uid=uid,json={'is_enabled':False}).status_code,403)
             self.assertEqual(self.request('POST',f'/api/automation/{entry}/delete-confirmation',uid=uid).status_code,403)
             self.assertEqual(self.request('GET','/api/bootstrap',uid=uid).json()['automation'],[])
-            self.assertEqual(self.db.count_automation_rules(uid),20)  # Retained after downgrade.
+            self.assertEqual(self.db.count_automation_rules(uid),limit)  # Retained after downgrade.
 
     def test_analytics_real_counters_periods_and_plan_payload(self):
         other=self.owner('ultra')

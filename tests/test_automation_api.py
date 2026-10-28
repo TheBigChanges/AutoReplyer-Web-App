@@ -39,17 +39,30 @@ class AutomationAPITests(unittest.TestCase):
     def delete(self, token, entry=7):
         return self.client.request('DELETE', f'/api/automation/{entry}', json={'token': token})
 
-    def test_all_paid_plans_validate_and_use_atomic_twenty_rule_limit(self):
-        for plan in ['plus', 'pro', 'ultra']:
+    def test_all_paid_plans_validate_and_use_atomic_plan_rule_limit(self):
+        for plan, limit in [('plus', 2), ('pro', 10), ('ultra', 30)]:
             self.db.get_user_plan.return_value = plan
             self.db.add_automation_rule.return_value = 7
             r = self.client.post('/api/automation', json=BODY)
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r.json(), {'id': 7, 'is_enabled': True, **CLEAN})
             self.engine.make_keyword_rule.assert_called_with('narx*', '<b>Original</b>', 'Prices', 100)
-            self.db.add_automation_rule.assert_called_with(123, **CLEAN, max_rules=20, enabled=True)
+            self.db.add_automation_rule.assert_called_with(123, **CLEAN, max_rules=limit, enabled=True)
         self.db.add_automation_rule.return_value = None
         self.assertEqual(self.client.post('/api/automation', json=BODY).status_code, 409)
+
+    def test_smart_conditions_are_plan_gated_and_strict(self):
+        smart = {**BODY, 'days': [0, 4], 'time_range': {'start': 1320, 'end': 360}}
+        self.assertEqual(self.client.post('/api/automation', json=smart).status_code, 403)
+        self.engine.validate_automation.assert_not_called()
+        self.db.get_user_plan.return_value = 'pro'
+        self.engine.validate_automation.return_value = CLEAN
+        self.db.add_automation_rule.return_value = 9
+        self.assertEqual(self.client.post('/api/automation', json=smart).status_code, 200)
+        args = self.engine.validate_automation.call_args.args
+        self.assertEqual(args[1]['items'], [{'type':'keyword_contains','value':'narx*'}, {'type':'days_of_week','value':[0,4]}, {'type':'time_between','value':{'start':1320,'end':360}}])
+        for change in [{'days':[]}, {'days':[0,0]}, {'days':[True]}, {'days':[7]}, {'time_range':{'start':0}}, {'time_range':{'start':False,'end':10}}, {'time_range':{'start':0,'end':1440}}]:
+            self.assertEqual(self.client.post('/api/automation',json={**BODY,**change}).status_code,422,change)
 
     def test_free_and_unknown_plan_cannot_create_toggle_confirm_or_delete(self):
         token = self.issue()

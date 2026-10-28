@@ -424,3 +424,5 @@ dialog::backdrop { background: #102c246b; }
 }
 @media (prefers-reduced-motion: reduce) { .automation-rule { transition: none; } }
 @media (prefers-reduced-transparency: reduce) { .automation-review { background: var(--raised); backdrop-filter: none; -webkit-backdrop-filter: none; } }
+
+.automation-smart{border:1px solid var(--line);border-radius:14px;padding:16px;margin:24px 0;background:var(--raised)}.automation-smart legend{font-size:12px;font-weight:600;padding:0 8px}.automation-smart:disabled{opacity:.65}

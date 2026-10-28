@@ -1,5 +1,15 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
+Plus: 2 ta, Pro: 10 ta, Ultra: 30 ta qoida. Kun va vaqt shartlari Pro va Ultra’da. Free’da qoidalar saqlanadi, ammo ishlamaydi.|Plus: 2, Pro: 10, Ultra: 30 правил. Дни и время доступны на Pro и Ultra. На Free правила сохраняются, но не работают.|Plus: 2, Pro: 10, Ultra: 30 rules. Day and time conditions require Pro or Ultra. On Free, rules are kept but do not run.
+2 ta avtomatlashtirish qoidasi|2 правила автоматизации|2 automation rules
+10 ta avtomatlashtirish qoidasi|10 правил автоматизации|10 automation rules
+30 ta avtomatlashtirish qoidasi|30 правил автоматизации|30 automation rules
+Smart shartlar (Pro / Ultra)|Умные условия (Pro / Ultra)|Smart conditions (Pro / Ultra)
+Kunlar ixtiyoriy. Tanlamasangiz har kuni ishlaydi. Vaqtni bo‘sh qoldirsangiz cheklanmaydi. Barcha shartlar birga bajariladi (AND).|Дни необязательны: без выбора правило работает ежедневно. Пустое время означает отсутствие ограничения. Все условия должны совпасть (И).|Days are optional: leave all clear for every day. Leave times empty for no time limit. All conditions must match (AND).
+Yarim tundan o‘tuvchi oraliq boshlangan kunga tegishli. Boshlanish va tugash farq qilsin.|Ночной интервал относится ко дню начала. Начало и конец должны различаться.|Overnight windows belong to their starting day. Start and end must differ.
+Hozirgi tarifda ishlamaydi. Faqat limitdagi eng eski qoidalar hisoblanadi; kun/vaqt shartlari Pro va Ultra’da.|Не работает на текущем тарифе. Учитываются старейшие правила в пределах лимита; дни и время требуют Pro или Ultra.|Inactive on this plan. Only the oldest rules within the limit are considered; day/time conditions require Pro or Ultra.
+Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.|Условия по дням и времени доступны только на Pro и Ultra.|Day and time conditions require Pro or Ultra.
+Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.|Достигнут лимит правил автоматизации вашего тарифа.|Your plan’s automation rule limit has been reached.
 Bot yangilanishi kutilmoqda|Ожидается обновление бота|Waiting for the bot update
 Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.|Сначала запустите новую версию бота. База автоматизации ещё не готова.|Start the updated bot first. The Automation database is not ready yet.
 Avtomatlashtirish|Автоматизация|Automation

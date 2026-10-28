@@ -377,3 +377,32 @@ not available locally; the existing CI matrix targets Python3.13 and3.14.
 Deletion confirmations are process-local, matching the deployment's explicit
 single worker. A restart safely invalidates them; multiple instances need a
 shared store before scaling. Existing rate/membership cache limits remain.
+
+
+## Automation v1.1 upstream sync — 2026-10-28
+
+Compared bot82c37864 to65b9a73896ffd86850e04c7ac13e89ab90986c99:
+production changes are automation.py, bot.py and i18n.py; db/logic/analytics
+remain unchanged. Reviewed all changed production diffs plus README/test changes.
+Original bot repo remains read-only. Updated Web App Docker pin to65b9a738.
+
+Server creation limits now match Plus2/Pro10/Ultra30 (administrator effective
+Ultra). Optional unique days0–6 and a strict minute time_range require Pro/Ultra.
+Use original bot validator for AND/canonical conditions, with bounded flat API
+inputs; explicit toggles/owner scope and one-use deletes are preserved. Existing
+keyword rules remain compatible. The Web App does not evaluate or send real
+messages; original bot runtime enforces day/time, owner timezone, oldest-ID plan
+selection (disabled entries count), priority, cooldown, sleep and schedule gates.
+UI cards label retained rules excluded by downgrade, and show day/time/timezone.
+
+Added optional day-picker/time fields and review text using existing glass,
+control and reduced-motion system, in three languages. Pricing lists2/10/30;
+Auto-Reply links to Sleep, matching upstream menu grouping. Existing routes and
+explicit Offline updates are preserved. No migrations, new dependencies, polling,
+production credentials or production DB writes were introduced.
+
+Local64Python tests passed;12real PostgreSQL18.6 contract tests passed, including
+all-plan concurrent last-slot boundaries, strict smart-condition gates and
+Monday22:00–Tuesday06:00 boundary/negation behavior. Node syntax,394-message
+catalog and API-client credential-routing checks passed. Browser results and
+remote CI/deployment proof are recorded in the local session handoff.

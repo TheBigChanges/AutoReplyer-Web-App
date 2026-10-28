@@ -125,11 +125,25 @@ class Schedule(Input):
     text: str | None = Field(None, max_length=500)
 
 
+class AutomationTime(Input):
+    start: int = Field(ge=0, le=1439, strict=True)
+    end: int = Field(ge=0, le=1439, strict=True)
+
+
 class AutomationRule(Input):
     name: str = Field(min_length=1, max_length=60)
     keyword: str = Field(min_length=1, max_length=50)
     reply: str = Field(min_length=1, max_length=500)
     priority: int = Field(100, ge=0, le=10000, strict=True)
+    days: list[Annotated[int, Field(ge=0, le=6, strict=True)]] | None = Field(None, min_length=1, max_length=7)
+    time_range: AutomationTime | None = None
+
+    @field_validator('days')
+    @classmethod
+    def unique_days(cls, value):
+        if value is not None and len(set(value)) != len(value):
+            raise ValueError('Duplicate days')
+        return value
 
 
 class DeleteConfirmation(Input):
@@ -329,7 +343,7 @@ def edit_knowledge(entry_id: EntryId, body: Knowledge, user: User):
     return save_item('knowledge', body, user, entry_id)
 
 
-AUTOMATION_LIMIT = 20
+AUTOMATION_LIMITS = {'plus': 2, 'pro': 10, 'ultra': 30}
 _automation_confirmations = {}
 _automation_lock = threading.Lock()
 
@@ -351,16 +365,29 @@ def automation_engine():
 @app.post('/api/automation')
 def create_automation(body: AutomationRule, user: User):
     uid = user['id']
-    require(uid, 'automation')
+    current_plan = require(uid, 'automation')
+    smart = body.days is not None or body.time_range is not None
+    if smart and current_plan not in ('pro', 'ultra'):
+        raise HTTPException(403, 'Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.')
     engine = automation_engine()
     try:
-        clean = engine.make_keyword_rule(body.keyword, body.reply, body.name, body.priority)
+        if smart:
+            items = [{'type': 'keyword_contains', 'value': body.keyword}]
+            if body.days is not None:
+                items.append({'type': 'days_of_week', 'value': body.days})
+            if body.time_range is not None:
+                items.append({'type': 'time_between', 'value': body.time_range.model_dump()})
+            clean = engine.validate_automation(body.name, {'operator': 'all', 'items': items},
+                                               {'type': 'send_reply', 'text': body.reply}, body.priority)
+        else:
+            clean = engine.make_keyword_rule(body.keyword, body.reply, body.name, body.priority)
     except engine.AutomationError:
-        raise HTTPException(422, 'Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.') from None
+        message = 'Qoida shartlarini tekshiring.' if smart else 'Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.'
+        raise HTTPException(422, message) from None
     db, _, _ = modules()
-    result = automation_db_call(db.add_automation_rule, uid, **clean, max_rules=AUTOMATION_LIMIT, enabled=True)
+    result = automation_db_call(db.add_automation_rule, uid, **clean, max_rules=AUTOMATION_LIMITS[current_plan], enabled=True)
     if result is None:
-        raise HTTPException(409, 'Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.')
+        raise HTTPException(409, 'Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.')
     return {'id': result, 'is_enabled': True, **clean}
 
 

@@ -159,7 +159,7 @@ browser dependencies are not installed in the Render image.
 ### Automation Engine
 
 The Automation section uses the bot's existing `automation_rules` table and
-original `automation.py` validator. Plus, Pro and Ultra each allow 20 rules;
+original `automation.py` validator. Plus allows 2 rules, Pro 10 and Ultra 30 rules;
 Free is locked, including direct API calls. Expired subscriptions fall back to
 Free. Saved rules remain in the bot database after downgrade.
 
@@ -196,3 +196,16 @@ Deletion confirmations, like the existing limiter, are local to the single
 Web App process. Restarting it invalidates outstanding confirmations safely.
 A deployment with multiple instances needs a shared confirmation store before
 scaling; otherwise requests may be rejected and require a fresh confirmation.
+
+
+Automation v1.1 adds optional `days` (unique weekdays 0=Monday to 6=Sunday)
+and `time_range` (`start`/`end` minutes, 0–1439, start differs from end) to
+POST /api/automation. These fields require Pro/Ultra on the server; Plus remains
+keyword-only. All filters combine with AND. Empty day selection and empty time
+fields omit those filters. Overnight windows belong to their starting day, in
+the account time zone. Legacy keyword-only rules remain compatible.
+After a downgrade, the bot considers only the oldest IDs up to the plan limit,
+including disabled rules in that count; day/time rules require Pro/Ultra. The
+Web App preserves all saved rules and labels those unavailable on the current
+plan. Auto-Reply now also links directly to Sleep settings, matching the bot's
+new Auto-Reply menu grouping. Existing explicit offline updates stay idempotent.

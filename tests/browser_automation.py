@@ -16,7 +16,7 @@ with sync_playwright() as p:
     seed.locator('[data-setting=offline]').first.locator('xpath=..').click()
     fixture = seed.evaluate('JSON.parse(localStorage.getItem("ar-demo-v1"))')
     fixture['user'] = {'id': 123, 'first_name': 'Automation QA'}
-    fixture['language'] = 'uz'; fixture['plan'] = 'plus'
+    fixture['language'] = 'uz'; fixture['plan'] = 'pro'
     fixture['automation'][0]['name'] = '<img src=x onerror=alert(1)>'
     context = browser.new_context(locale='uz-UZ', viewport={'width': 390, 'height': 844})
     context.route('https://telegram.org/**', lambda r: r.fulfill(body=STUB.replace('initData:""', 'initData:"signed-test"'), content_type='application/javascript'))
@@ -28,8 +28,8 @@ with sync_playwright() as p:
         elif path.startswith('analytics'): route.fulfill(json={'incoming': 0, 'sent': 0, 'kinds': {'ai': 0, 'faq': 0, 'static': 0, 'sleep': 0}, 'peak': None, 'skipped': None, 'series': None})
         elif path == 'automation':
             body = route.request.post_data_json; writes.append((path, body))
-            assert set(body) == {'name', 'keyword', 'reply', 'priority'}
-            rule = {'id': 99, 'name': body['name'], 'conditions': {'operator': 'all', 'items': [{'type': 'keyword_contains', 'value': body['keyword']}]}, 'action': {'type': 'send_reply', 'text': body['reply']}, 'priority': body['priority'], 'is_enabled': True}
+            assert set(body) == {'name', 'keyword', 'reply', 'priority', 'days', 'time_range'}
+            rule = {'id': 99, 'name': body['name'], 'conditions': {'operator': 'all', 'items': [{'type': 'keyword_contains', 'value': body['keyword']}, {'type':'days_of_week','value':body['days']}, {'type':'time_between','value':body['time_range']}]}, 'action': {'type': 'send_reply', 'text': body['reply']}, 'priority': body['priority'], 'is_enabled': True}
             fixture['automation'].append(rule)
             if hold['create']: held['create'] = (route, rule)
             else: route.fulfill(json=rule)
@@ -103,6 +103,9 @@ with sync_playwright() as p:
     page.locator('input[name=name]').fill('Delivery')
     page.locator('input[name=keyword]').fill('delivery')
     page.locator('textarea[name=reply]').fill('Your original reply')
+    page.locator('[name=automation_day][value="0"]').locator('xpath=..').click()
+    page.locator('[name=automation_start]').fill('22:00')
+    page.locator('[name=automation_end]').fill('06:00')
     page.locator('#automation-form [type=submit]').click()
     assert not writes
     hold['create'] = True
@@ -168,6 +171,10 @@ with sync_playwright() as p:
     expect(page.locator('#main')).to_contain_text('Waiting for the bot update')
     expect(page.locator('[data-action=add-automation]')).to_have_count(0)
     fixture['automation_available'] = True
+    fixture['plan'] = 'plus'; page.reload()
+    page.locator('[data-action=add-automation]').first.click()
+    expect(page.locator('[name=automation_start]')).to_be_disabled()
+    page.keyboard.press('Escape'); expect(page.locator('#modal')).not_to_be_visible()
     fixture['plan'] = 'free'; page.reload()
     expect(page.locator('[data-action=add-automation]')).to_have_count(0)
     expect(page.locator('[data-toggle^="automation:"]')).to_have_count(0)
