@@ -72,7 +72,7 @@ def verify_once(base, revision, dist=ROOT / 'dist'):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base-url', default='https://autoreplyer-web-app.onrender.com')
+    parser.add_argument('--base-url', default='https://autoreplyer-web-app-qv9f.onrender.com')
     parser.add_argument('--revision', required=True)
     parser.add_argument('--attempts', type=int, default=1)
     parser.add_argument('--interval', type=float, default=10)

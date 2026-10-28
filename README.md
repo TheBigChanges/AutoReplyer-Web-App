@@ -114,6 +114,11 @@ ten Playwright/Chromium browser suites against an isolated local FastAPI server.
 are pinned to full official release commit SHAs and jobs have read-only repository access.
 No production token or database credential is required.
 
+The current Web App service is https://autoreplyer-web-app-qv9f.onrender.com.
+The bot service is separate; its plain `OK` health response is not a Web App
+deployment proof. The local verifier and automated workflow target this Web App
+URL by default; `--base-url` can explicitly select another deployment.
+
 After successful CI for a main-branch push, the separate **Verify Render**
 workflow checks that `/api/health` reports that exact commit, the12 public assets
 match the tested checkout, unsigned API access returns401, and private paths and
