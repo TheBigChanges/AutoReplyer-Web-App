@@ -151,7 +151,7 @@ class PlanAndOwnerTests(unittest.TestCase):
         self.logic.match_faq.assert_called_once_with('Hi', [{'id': n} for n in range(15)])
 
     def test_analytics_restricts_payload_not_only_chart_ui(self):
-        summary = {'incoming': 20, 'sent': 10, 'kinds': {'ai': 1, 'faq': 2, 'static': 3, 'sleep': 4, 'incoming': 20, 'skipped': 99}, 'hourly': [0]*24, 'hourly_sent': [0]*24, 'peak': None, 'skipped': 99}
+        summary = {'incoming': 20, 'sent': 10, 'kinds': {'ai': 1, 'faq': 2, 'static': 3, 'sleep': 4, 'automation': 5, 'incoming': 20, 'skipped': 99}, 'hourly': [0]*24, 'hourly_sent': [0]*24, 'peak': None, 'skipped': 99}
         reports = SimpleNamespace(period_start=Mock(return_value=SimpleNamespace(timestamp=lambda: 0)), summarize=Mock(return_value=summary))
         self.db.get_settings.return_value = {'name_clock_tz': 'invalid/timezone'}
         with patch.object(adapter, 'modules', return_value=(self.db, self.logic, reports)):
@@ -160,7 +160,7 @@ class PlanAndOwnerTests(unittest.TestCase):
                 data = self.client.get('/api/analytics?days=1').json()
                 self.assertNotIn('skipped', data['kinds'])
                 self.assertEqual(data['skipped'], 99 if plan == 'ultra' else None)
-                self.assertEqual(set(data['kinds']), {'ai', 'faq', 'static', 'sleep'} if plan in ['pro', 'ultra'] else {'ai'})
+                self.assertEqual(set(data['kinds']), {'ai', 'faq', 'static', 'sleep', 'automation'} if plan in ['pro', 'ultra'] else {'ai'})
                 self.assertEqual(data['series'] is None, plan in ['free', 'unknown'])
 
     def test_schedule_toggle_returns_authoritative_state(self):

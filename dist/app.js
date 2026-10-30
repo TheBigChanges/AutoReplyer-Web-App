@@ -196,7 +196,8 @@ async function loadLive() {
       ai: 0,
       faq: 0,
       static: 0,
-      sleep: 0
+      sleep: 0,
+      automation: 0
     },
     peak: null,
     skipped: 0,
@@ -281,9 +282,9 @@ function chart(s) {
 }
 function donut(s) {
   if (mode === 'live' && ['free', 'plus'].includes(state.plan)) return `<div class="empty"><p>${tr("Taqsimot diagrammasi Pro va Ultra tariflarida mavjud.")}</p><a class="green-link" href="#plans">${tr("Tariflarni ko‘rish ↗")}</a></div>`;
-  const colors = ['#548d6c', '#a4c4a5', '#bca9d3', '#e5cc9a'];
-  const names = [tr("AI yordamchi"), 'Smart FAQ', tr("Oddiy javob"), tr("Uyqu rejimi")];
-  const vals = [s.kinds.ai, s.kinds.faq, s.kinds.static, s.kinds.sleep];
+  const colors = ['#548d6c', '#a4c4a5', '#bca9d3', '#e5cc9a', '#78aeb5'];
+  const names = [tr("AI yordamchi"), 'Smart FAQ', tr("Oddiy javob"), tr("Uyqu rejimi"), tr("Avtomatlashtirish")];
+  const vals = [s.kinds.ai, s.kinds.faq, s.kinds.static, s.kinds.sleep, s.kinds.automation || 0];
   let cumulative = 0;
   const gradient = vals.map((v, i) => {
     const start = cumulative;
@@ -349,7 +350,35 @@ function entryHTML(item, kind) {
 }
 const automationLimit = () => ({plus: 2, pro: 10, ultra: 30}[state.plan] || 0);
 function automationConditions(item) {
-  return (item.conditions?.items || []).filter(c => c.type !== 'keyword_contains');
+  return (item.conditions?.items || []).filter(c => ['days_of_week', 'time_between'].includes(c.type));
+}
+function automationKeywords(item) {
+  const condition = item.conditions?.items?.find(c => ['keyword_contains', 'keyword_any'].includes(c.type));
+  return condition?.type === 'keyword_any' ? condition.value : condition ? [condition.value] : [];
+}
+function automationValues(item) {
+  const extra = automationConditions(item);
+  return {name: item.name, keywords: automationKeywords(item), reply: item.action?.text || '', priority: item.priority,
+    days: extra.find(c => c.type === 'days_of_week')?.value || null,
+    time_range: extra.find(c => c.type === 'time_between')?.value || null};
+}
+function automationDate(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return '—';
+  const options = {dateStyle: 'medium', timeStyle: 'short'};
+  try {return date.toLocaleString(getLocale(), {...options, timeZone: state.settings.name_clock_tz || 'Asia/Tashkent'});}
+  catch {return date.toLocaleString(getLocale(), {...options, timeZone: 'Asia/Tashkent'});}
+}
+async function automationStats() {
+  const owner = accountKey(), request = ++deleteRequest;
+  const s = mode === 'live' ? await api('/api/automation/stats') : {
+    days: 7, period_sent: 0, all_sent: state.automation.reduce((sum, r) => sum + (r.sent_count || 0), 0) + (state.automation_deleted_sent || 0),
+    deleted_sent: state.automation_deleted_sent || 0, counters_since: null, total_rules: state.automation.length,
+    enabled_rules: state.automation.filter(r => r.is_enabled).length,
+    top: [...state.automation].filter(r => r.sent_count > 0).sort((a,b) => b.sent_count-a.sent_count || a.id-b.id).slice(0,3)
+  };
+  if (request !== deleteRequest || owner !== accountKey() || page !== 'automation') return;
+  modal(`${modalHead(tr("Automation statistikasi"))}<div class="automation-stats">${stat(tr("Jami qoidalar"), num(s.total_rules), 'automation', tr("Yoqilgan qoidalar: {0}", {0: num(s.enabled_rules)}))}${stat(tr("Oxirgi 7 kundagi javoblar"), num(s.period_sent), 'send', mode === 'demo' ? tr("Demo: raqamlar namunaviy.") : tr("Hisoblagichlar kechikib yangilanishi mumkin."))}${stat(tr("Tarixiy jami javoblar"), num(s.all_sent), 'chart', tr("O‘chirilgan qoidalardan: {0}", {0: num(s.deleted_sent)}))}</div><p class="hint">${tr("Hisob boshlangan vaqt: {0}", {0: e(automationDate(s.counters_since))})}</p><h3>${tr("Eng ko‘p ishlatilgan qoidalar")}</h3><div class="automation-top">${s.top.map(r => `<div class="feature-row"><span class="feature-icon">${icon('automation')}</span><div><strong>${e(r.name)}</strong></div><span class="badge">${num(r.sent_count)}</span></div>`).join('') || `<p class="hint">${tr("Hali javob yuborilmagan.")}</p>`}</div><p class="note">${tr("Hisoblagichlar taxminiy: avvalgi xabarlar tiklanmaydi. Mijoz xabarlari va chat ID bu statistikada saqlanmaydi.")}</p>`);
 }
 function automationConditionsText(items) {
   return items.map(c => c.type === 'days_of_week' ? c.value.map(d => days[d]).join(' · ') : `${time(c.value.start)} — ${time(c.value.end)}`).join(' · AND · ');
@@ -358,25 +387,41 @@ function automation() {
   const allowed = ['plus', 'pro', 'ultra'].includes(state.plan);
   const items = state.automation;
   const ready = state.automation_available !== false;
-  const intro = head(tr("Avtomatlashtirish"), tr("Kerakli so‘z. Kerakli javob. Hammasi siz belgilagandek."), allowed ? (ready ? button(tr("Qoida qo‘shish"), 'add-automation', 'plus', 'primary') : '') : `<a class="button primary" href="#plans">${icon('crown')}${tr("Tariflarni ko‘rish")}</a>`);
-  if (!allowed) return intro + `<section class="card automation-intro empty">${icon('shield')}<span class="badge">PLUS · PRO · ULTRA</span><h2>${tr("Qoidalaringiz uchun yangi imkoniyat")}</h2><p>${tr("Plus: 2 ta, Pro: 10 ta, Ultra: 30 ta qoida. Kun va vaqt shartlari Pro va Ultra’da. Free’da qoidalar saqlanadi, ammo ishlamaydi.")}</p><a class="green-link" href="#plans">${tr("Tariflarni ko‘rish ↗")}</a></section>`;
+  const intro = head(tr("Avtomatlashtirish"), tr("Kerakli so‘z. Kerakli javob. Hammasi siz belgilagandek."), allowed ? (ready ? `<div class="button-group">${button(tr("Statistika"), 'automation-stats', 'chart')}${button(tr("Qoida qo‘shish"), 'add-automation', 'plus', 'primary')}</div>` : '') : `<a class="button primary" href="#plans">${icon('crown')}${tr("Tariflarni ko‘rish")}</a>`);
+  if (!allowed) return intro + `<section class="card automation-intro empty">${icon('shield')}<span class="badge">PLUS · PRO · ULTRA</span><h2>${tr("Qoidalaringiz uchun yangi imkoniyat")}</h2><p>${tr("Plus: 2 ta, Pro: 10 ta, Ultra: 30 ta qoida. YOKI, kun va vaqt shartlari Pro va Ultra’da. Free’da qoidalar saqlanadi, ammo ishlamaydi.")}</p><a class="green-link" href="#plans">${tr("Tariflarni ko‘rish ↗")}</a></section>`;
   if (!ready) return intro + `<section class="card empty">${icon('clock')}<h2>${tr("Bot yangilanishi kutilmoqda")}</h2><p>${tr("Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botni ochish")}</a></section>`;
-  return intro + `<section class="card automation-intro"><div class="card-head"><span class="badge">AUTOMATION ENGINE · 1.1</span><span class="badge gray">${items.length} / ${automationLimit()}</span></div><div class="automation-flow"><div><span class="eyebrow">${tr("AGAR")}</span><h2>${tr("Xabarda kalit so‘z bo‘lsa")}</h2><span class="chip">narx*</span></div><span class="automation-connector">${icon('arrow')}</span><div><span class="eyebrow">${tr("UNDA")}</span><h2>${tr("Siz yozgan javob yuboriladi")}</h2><small>${tr("AI so‘rovisiz. Bitta xabarga bitta qoida.")}</small></div></div><p class="hint">${tr("Faqat Offline rejimida ishlaydi. Uyqu rejimi yoki faol jadval vaqtida ishlamaydi. Cooldown va Telegram ruxsatlari saqlanadi.")}</p><p class="hint">${tr("Inkor so‘zli xabarlarga mos kelmaydi. Offline rejimida: Automation → FAQ → AI → oddiy javob.")}</p><a class="green-link" href="#replies">${tr("Avtojavobni sozlash")}${icon('arrow')}</a></section><section class="card"><div class="card-head"><h2>${tr("Mening qoidalarim")}</h2><span class="subtitle">${tr("Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.")}</span></div><div class="list-toolbar"><input class="search" type="text" id="entry-search" aria-label="${tr("Qidirish")}" placeholder="${tr("Qoida yoki kalit so‘zni qidiring…")}"><span class="badge gray">PLUS · PRO · ULTRA</span></div><div id="entry-list">${items.map(automationHTML).join('') || `<div class="empty">${icon('automation')}<h3>${tr("Birinchi qoidangizni yarating")}</h3><p>${tr("Masalan, narx* so‘ziga o‘zingizning javobingizni ulang.")}</p>${button(tr("Qoida qo‘shish"), 'add-automation', 'plus')}</div>`}</div><p class="hint" id="no-results" hidden>${tr("Qidiruvga mos natija topilmadi.")}</p></section>`;
+  return intro + `<section class="card automation-intro"><div class="card-head"><span class="badge">AUTOMATION ENGINE · 1.2</span><span class="badge gray">${items.length} / ${automationLimit()}</span></div><div class="automation-flow"><div><span class="eyebrow">${tr("AGAR")}</span><h2>${tr("Xabarda kalit so‘z bo‘lsa")}</h2><span class="chip">narx* ${tr("YOKI")} qancha ${tr("YOKI")} price</span></div><span class="automation-connector">${icon('arrow')}</span><div><span class="eyebrow">${tr("UNDA")}</span><h2>${tr("Siz yozgan javob yuboriladi")}</h2><small>${tr("AI so‘rovisiz. Bitta xabarga bitta qoida.")}</small></div></div><p class="hint">${tr("Faqat Offline rejimida ishlaydi. Uyqu rejimi yoki faol jadval vaqtida ishlamaydi. Cooldown va Telegram ruxsatlari saqlanadi.")}</p><p class="hint">${tr("Inkor so‘zli xabarlarga mos kelmaydi. Offline rejimida: Automation → FAQ → AI → oddiy javob.")}</p><a class="green-link" href="#replies">${tr("Avtojavobni sozlash")}${icon('arrow')}</a></section><section class="card"><div class="card-head"><h2>${tr("Mening qoidalarim")}</h2><span class="subtitle">${tr("Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.")}</span></div><div class="list-toolbar"><input class="search" type="text" id="entry-search" aria-label="${tr("Qidirish")}" placeholder="${tr("Qoida yoki kalit so‘zni qidiring…")}"><span class="badge gray">PLUS · PRO · ULTRA</span></div><div id="entry-list">${items.map(automationHTML).join('') || `<div class="empty">${icon('automation')}<h3>${tr("Birinchi qoidangizni yarating")}</h3><p>${tr("Masalan, narx* so‘ziga o‘zingizning javobingizni ulang.")}</p>${button(tr("Qoida qo‘shish"), 'add-automation', 'plus')}</div>`}</div><p class="hint" id="no-results" hidden>${tr("Qidiruvga mos natija topilmadi.")}</p></section>`;
 }
 function automationHTML(item) {
-  const keyword = item.conditions?.items?.[0]?.value || '';
+  const keywords = automationKeywords(item);
+  const keyword = keywords.join(` ${tr("YOKI")} `);
   const text = item.action?.text || '';
   const extra = automationConditions(item);
   const oldest = [...state.automation].sort((a,b) => a.id-b.id).slice(0, automationLimit());
-  const restricted = !oldest.some(r => r.id === item.id) || (extra.length && !['pro','ultra'].includes(state.plan));
-  return `<article class="entry automation-rule ${item.is_enabled ? '' : 'is-paused'}" data-search="${e([item.name, keyword, text].join(' ').toLowerCase())}"><div class="entry-title"><h3>${icon('automation')}${e(item.name)}</h3><span class="badge ${item.is_enabled ? '' : 'gray'}">${item.is_enabled ? tr("Faol") : tr("Pauzada")}</span></div><div class="chips"><span class="chip">${e(keyword)}</span><span class="chip">${tr("Ustuvorlik")}: ${e(item.priority)}</span></div>${extra.length ? `<p class="hint">${e(automationConditionsText(extra))} · ${e(state.settings.name_clock_tz || 'Asia/Tashkent')}</p>` : ''}${restricted ? `<p class="note">${tr("Hozirgi tarifda ishlamaydi. Faqat limitdagi eng eski qoidalar hisoblanadi; kun/vaqt shartlari Pro va Ultra’da.")}</p>` : ''}<p class="automation-answer">${e(text)}</p><div class="entry-actions">${button(tr("O‘chirish"), `delete-automation:${item.id}`, 'trash', 'small danger')}<label class="switch"><input type="checkbox" aria-label="${e(tr("{0} holati", {0: item.name}))}" data-toggle="automation:${item.id}" ${item.is_enabled ? 'checked' : ''}><span></span></label></div></article>`;
+  const restricted = !oldest.some(r => r.id === item.id) || ((extra.length || keywords.length > 1) && !['pro','ultra'].includes(state.plan));
+  return `<article class="entry automation-rule ${item.is_enabled ? '' : 'is-paused'}" data-search="${e([item.name, keyword, text].join(' ').toLowerCase())}"><div class="entry-title"><h3>${icon('automation')}${e(item.name)}</h3><span class="badge ${item.is_enabled ? '' : 'gray'}">${item.is_enabled ? tr("Faol") : tr("Pauzada")}</span></div><div class="chips"><span class="chip">${e(keyword)}</span><span class="chip">${tr("Ustuvorlik")}: ${e(item.priority)}</span></div>${extra.length ? `<p class="hint">${e(automationConditionsText(extra))} · ${e(state.settings.name_clock_tz || 'Asia/Tashkent')}</p>` : ''}${restricted ? `<p class="note">${tr("Hozirgi tarifda ishlamaydi. Faqat limitdagi eng eski qoidalar hisoblanadi; YOKI va kun/vaqt shartlari Pro va Ultra’da.")}</p>` : ''}<p class="automation-answer">${e(text)}</p><div class="automation-counter"><span>${icon('send')}${tr("Yuborilgan javoblar")}: <strong>${num(item.sent_count || 0)}</strong></span><small>${tr("Oxirgi javob: {0}", {0: e(automationDate(item.last_sent_at))})}</small></div><div class="entry-actions">${button(tr("Tahrirlash"), `edit-automation:${item.id}`, 'edit', 'small')}${button(tr("O‘chirish"), `delete-automation:${item.id}`, 'trash', 'small danger')}<label class="switch"><input type="checkbox" aria-label="${e(tr("{0} holati", {0: item.name}))}" data-toggle="automation:${item.id}" ${item.is_enabled ? 'checked' : ''}><span></span></label></div></article>`;
 }
-function automationEditor() {
+function automationEditor(id) {
+  const item = id ? state.automation.find(r => r.id === Number(id)) : null;
+  if (id && !item) return;
   if (state.automation_available === false) return;
   if (pendingAutomation.has(accountKey())) return;
   if (!['plus', 'pro', 'ultra'].includes(state.plan)) { toast(tr("Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.")); return; }
-  if (state.automation.length >= automationLimit()) { toast(tr("Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.")); return; }
-  modal(`${modalHead(tr("Yangi qoida"))}<form id="automation-form"><div id="automation-fields"><label class="field"><span>${tr("Qoida nomi")}</span><input name="name" maxlength="60" required></label><label class="field"><span>${tr("Kalit so‘z yoki ibora")}</span><input name="keyword" maxlength="50" placeholder="narx*" required><small>${tr("1–5 so‘z, 50 belgigacha. narx — butun so‘z; narx* — narxi, narxlar. * oldidagi oxirgi so‘z kamida 3 harf bo‘lsin.")}</small></label><label class="field"><span>${tr("Tayyor javob")}</span><textarea name="reply" maxlength="500" required></textarea></label><fieldset class="automation-smart" ${['pro','ultra'].includes(state.plan) ? '' : 'disabled'}><legend>${tr("Smart shartlar (Pro / Ultra)")}</legend><p class="hint">${tr("Kunlar ixtiyoriy. Tanlamasangiz har kuni ishlaydi. Vaqtni bo‘sh qoldirsangiz cheklanmaydi. Barcha shartlar birga bajariladi (AND).")}</p><div class="day-picker">${days.map((d,i) => `<label><input type="checkbox" name="automation_day" value="${i}"><span>${d}</span></label>`).join('')}</div><div class="two-fields"><label class="field"><span>${tr("Boshlanish")}</span><input type="time" name="automation_start"></label><label class="field"><span>${tr("Tugash")}</span><input type="time" name="automation_end"></label></div><p class="hint">${tr("Yarim tundan o‘tuvchi oraliq boshlangan kunga tegishli. Boshlanish va tugash farq qilsin.")} · ${e(state.settings.name_clock_tz || 'Asia/Tashkent')}</p></fieldset><label class="field"><span>${tr("Ustuvorlik")}</span><input name="priority" type="number" min="0" max="10000" step="1" value="100" required><small>${tr("Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.")}</small></label></div><section id="automation-review" class="automation-review" hidden><span class="badge">${tr("Saqlashdan oldin tekshiring")}</span><h3 id="automation-review-name"></h3><span class="chip" id="automation-review-keyword"></span><p class="chat-bubble" id="automation-review-reply"></p><p class="hint">${tr("Saqlangach qoida darhol yoqiladi. Uni istalgan payt pauzaga qo‘yishingiz mumkin.")}</p></section><p class="error-text" id="form-error" role="alert"></p><div class="save-row"><button class="button" type="button" data-action="automation-back" hidden>${tr("Tahrirlash")}</button><button class="button primary" type="submit">${icon('arrow')}${tr("Davom etish")}</button></div></form>`);
+  if (!item && state.automation.length >= automationLimit()) { toast(tr("Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.")); return; }
+  modal(`${modalHead(item ? tr("Tahrirlash") : tr("Yangi qoida"))}<form id="automation-form" data-id="${item?.id || ''}"><div id="automation-fields"><label class="field"><span>${tr("Qoida nomi")}</span><input type="text" name="name" maxlength="60" required></label><label class="field"><span>${tr("Kalit so‘z yoki ibora")}</span><input type="text" name="keyword" maxlength="260" placeholder="narx*, qancha, price" required><small>${tr("Plus: bitta kalit so‘z. Pro/Ultra: vergul bilan ajratilgan 2–5 ta kalit so‘z (YOKI).")}</small><small>${tr("1–5 so‘z, 50 belgigacha. narx — butun so‘z; narx* — narxi, narxlar. * oldidagi oxirgi so‘z kamida 3 harf bo‘lsin.")}</small></label><label class="field"><span>${tr("Tayyor javob")}</span><textarea name="reply" maxlength="500" required></textarea></label><fieldset class="automation-smart" ${['pro','ultra'].includes(state.plan) ? '' : 'disabled'}><legend>${tr("Smart shartlar (Pro / Ultra)")}</legend><p class="hint">${tr("Kunlar ixtiyoriy. Tanlamasangiz har kuni ishlaydi. Vaqtni bo‘sh qoldirsangiz cheklanmaydi. Barcha shartlar birga bajariladi (AND).")}</p><div class="day-picker">${days.map((d,i) => `<label><input type="checkbox" name="automation_day" value="${i}"><span>${d}</span></label>`).join('')}</div><div class="two-fields"><label class="field"><span>${tr("Boshlanish")}</span><input type="time" name="automation_start"></label><label class="field"><span>${tr("Tugash")}</span><input type="time" name="automation_end"></label></div><p class="hint">${tr("Yarim tundan o‘tuvchi oraliq boshlangan kunga tegishli. Boshlanish va tugash farq qilsin.")} · ${e(state.settings.name_clock_tz || 'Asia/Tashkent')}</p></fieldset>${item && !['pro','ultra'].includes(state.plan) ? `<div class="button-group">${automationValues(item).days ? button(tr("Kun shartini olib tashlash"), 'automation-clear:days', 'close', 'small') : ''}${automationValues(item).time_range ? button(tr("Vaqt shartini olib tashlash"), 'automation-clear:time_range', 'close', 'small') : ''}</div>` : ''}<label class="field"><span>${tr("Ustuvorlik")}</span><input name="priority" type="number" min="0" max="10000" step="1" value="100" required><small>${tr("Kichik ustuvorlik raqami avval ishlaydi; teng bo‘lsa, eski qoida tanlanadi.")}</small></label></div><section id="automation-review" class="automation-review" hidden><span class="badge">${tr("Saqlashdan oldin tekshiring")}</span><h3 id="automation-review-name"></h3><span class="chip" id="automation-review-keyword"></span><p class="chat-bubble" id="automation-review-reply"></p><p class="hint">${item ? tr("O‘zgarishlar saqlanadi. Qoidaning yoqilgan holati va hisoblagichlari saqlanib qoladi.") : tr("Saqlangach qoida darhol yoqiladi. Uni istalgan payt pauzaga qo‘yishingiz mumkin.")}</p></section><p class="error-text" id="form-error" role="alert"></p><div class="save-row"><button class="button" type="button" data-action="automation-back" hidden>${tr("Tahrirlash")}</button><button class="button primary" type="submit">${icon('arrow')}${tr("Davom etish")}</button></div></form>`);
+  const form = document.querySelector('#automation-form');
+  if (item) {
+    const values = automationValues(item);
+    form.dataset.original = JSON.stringify(values);
+    form.elements.name.value = values.name;
+    form.elements.keyword.value = values.keywords.join(', ');
+    form.elements.reply.value = values.reply;
+    form.elements.priority.value = values.priority;
+    form.querySelectorAll('[name=automation_day]').forEach(el => {el.checked = values.days?.includes(Number(el.value)) || false;});
+    form.elements.automation_start.value = values.time_range ? time(values.time_range.start) : '';
+    form.elements.automation_end.value = values.time_range ? time(values.time_range.end) : '';
+  }
+
 }
 function scheduler() {
   return head(tr("Smart jadval"), tr("Javoblar kerakli vaqtda, har hafta avtomatik ishga tushadi."), button(tr("Jadval qo‘shish"), 'add-schedule', 'plus', 'primary')) + `<section class="card"><div class="card-head"><h2>${tr("Haftalik jadvallar")} <span class="badge gray">${state.schedules.length} / ${{
@@ -582,6 +627,16 @@ document.addEventListener('click', async event => {
       return;
     }
     if (action === 'add-automation') { automationEditor(); return; }
+    if (action?.startsWith('edit-automation:')) { automationEditor(action.split(':')[1]); return; }
+    if (action === 'automation-stats') {
+      if (el.disabled) return;
+      busy = true; el.disabled = true; el.setAttribute('aria-busy', 'true');
+      await automationStats(); return;
+    }
+    if (action?.startsWith('automation-clear:')) {
+      el.form.dataset[action.endsWith(':days') ? 'clearDays' : 'clearTime'] = 'true';
+      el.disabled = true; return;
+    }
     if (action === 'automation-back') {
       const form = el.form;
       delete form.dataset.review;
@@ -630,6 +685,7 @@ document.addEventListener('click', async event => {
       const [, kind, id] = action.split(':');
       if (mode === 'live') await api(`/api/${kind}/${id}`, 'DELETE', kind === 'automation' ? {token: el.dataset.token} : undefined);
       const key = kind === 'schedule' ? 'schedules' : kind;
+      if (kind === 'automation' && mode === 'demo') state.automation_deleted_sent = (state.automation_deleted_sent || 0) + (state.automation.find(r => r.id === Number(id))?.sent_count || 0);
       state[key] = state[key].filter(r => r.id !== Number(id));
       persist();
       if (el.isConnected) await closeDialog(document.querySelector('#modal'));
@@ -757,43 +813,69 @@ document.addEventListener('submit', async event => {
     }
     if (form.id === 'automation-form') {
       form.querySelector('#form-error').textContent = '';
-      const values = {name: String(data.get('name')).trim(), keyword: String(data.get('keyword')).trim(), reply: String(data.get('reply')).trim(), priority: Number(data.get('priority'))};
-      if (!values.name || !values.reply || !values.keyword) throw Error(tr("Maydonlarni to‘ldiring."));
-      const chosenDays = data.getAll('automation_day').map(Number);
+      const id = Number(form.dataset.id) || null;
+      const original = id ? JSON.parse(form.dataset.original) : null;
+      const smart = ['pro','ultra'].includes(state.plan);
+      const values = {name: String(data.get('name')).trim(), keywords: String(data.get('keyword')).split(',').map(k => k.trim()), reply: String(data.get('reply')).trim(), priority: Number(data.get('priority'))};
+      if (original && String(data.get('keyword')).trim() === original.keywords.join(', ')) values.keywords = original.keywords;
+      if (!values.name || !values.reply || values.keywords.some(k => !k)) throw Error(tr("Maydonlarni to‘ldiring."));
+      values.days = data.getAll('automation_day').map(Number);
+      if (!values.days.length) values.days = null;
       const start = data.get('automation_start'), end = data.get('automation_end');
-      if (chosenDays.length) values.days = chosenDays;
+      values.time_range = null;
       if (start || end) {
         if (!start || !end || start === end) throw Error(tr("Boshlanish va tugash vaqti teng bo‘lmasin."));
         values.time_range = {start: minutes(start), end: minutes(end)};
       }
-      const raw = values.keyword.endsWith('*') ? values.keyword.slice(0, -1) : values.keyword;
-      const words = raw.toLowerCase().replace(/[’‘ʻʼʹ'`´]/g, '').match(/[\p{L}\p{N}]+/gu) || [];
-      if (raw.includes('*') || !words.length || words.length > 5 || (values.keyword.endsWith('*') && [...words.at(-1)].length < 3)) throw Error(tr("Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi."));
+      // Disabled fields do not appear in FormData. Preserve retained filters on Plus.
+      if (original && !smart) {values.days = form.dataset.clearDays ? null : original.days; values.time_range = form.dataset.clearTime ? null : original.time_range;}
+      if (values.keywords.length > 5) throw Error(tr("Ko‘pi bilan 5 ta takrorlanmagan kalit so‘z kiriting."));
+      if (values.keywords.length > 1 && !smart && JSON.stringify(values.keywords) !== JSON.stringify(original?.keywords)) throw Error(tr("YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud."));
+      const normalizedKeywords = new Set();
+      for (const keyword of values.keywords) {
+        const raw = keyword.endsWith('*') ? keyword.slice(0, -1) : keyword;
+        const words = raw.toLowerCase().replace(/ё/g, 'е').replace(/[’‘ʻʼʹ'`´]/g, '').match(/[\p{L}\p{N}]+/gu) || [];
+        if (keyword.length > 50 || raw.includes('*') || !words.length || words.length > 5 || (keyword.endsWith('*') && [...words.at(-1)].length < 3)) throw Error(tr("Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi."));
+        const normalized = JSON.stringify([words, keyword.endsWith('*')]);
+        if (normalizedKeywords.has(normalized)) throw Error(tr("Ko‘pi bilan 5 ta takrorlanmagan kalit so‘z kiriting."));
+        normalizedKeywords.add(normalized);
+      }
+      const changes = original ? Object.fromEntries(Object.entries(values).filter(([k,v]) => JSON.stringify(v) !== JSON.stringify(original[k]))) : values;
+      if (original && !Object.keys(changes).length) {await closeDialog(document.querySelector('#modal')); return;}
       const fingerprint = JSON.stringify(values);
       if (form.dataset.review !== fingerprint) {
         form.dataset.review = fingerprint;
         form.querySelector('#automation-review-name').textContent = values.name;
-        form.querySelector('#automation-review-keyword').textContent = `${values.keyword} · ${tr("Ustuvorlik")}: ${values.priority} · ${values.days ? values.days.map(d => days[d]).join(" · ") : ""} ${values.time_range ? time(values.time_range.start)+" — "+time(values.time_range.end) : ""}`;
+        form.querySelector('#automation-review-keyword').textContent = `${values.keywords.join(` ${tr("YOKI")} `)} · ${tr("Ustuvorlik")}: ${values.priority} · ${values.days ? values.days.map(d => days[d]).join(" · ") : ""} ${values.time_range ? time(values.time_range.start)+" — "+time(values.time_range.end) : ""}`;
         form.querySelector('#automation-review-reply').textContent = values.reply;
         form.querySelector('#automation-fields').hidden = true;
         const review = form.querySelector('#automation-review');
         review.hidden = false;
         form.querySelector('[data-action=automation-back]').hidden = false;
-        submit.innerHTML = `${icon('save')}${tr("Tasdiqlash va yoqish")}`;
+        submit.innerHTML = `${icon('save')}${id ? tr("Saqlash") : tr("Tasdiqlash va yoqish")}`;
         animateSurface(review);
         submit.focus();
         return;
       }
       if (pendingAutomation.has(submittedAccount)) return;
       pendingAutomation.add(submittedAccount);
+      const enabledBeforeSave = id ? state.automation.find(r => r.id === id)?.is_enabled : undefined;
       let rule;
-      if (mode === 'live') rule = await api('/api/automation', 'POST', values);
+      if (mode === 'live') rule = await api(id ? `/api/automation/${id}` : '/api/automation', id ? 'PATCH' : 'POST', changes);
       else {
-        if (state.automation.length >= automationLimit()) throw Error(tr("Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan."));
-        rule = {id: Date.now(), name: values.name, conditions: {operator: 'all', items: [{type: 'keyword_contains', value: values.keyword}, ...(values.days ? [{type: 'days_of_week', value: values.days}] : []), ...(values.time_range ? [{type: 'time_between', value: values.time_range}] : [])]}, action: {type: 'send_reply', text: values.reply}, priority: values.priority, is_enabled: true};
+        if (!id && state.automation.length >= automationLimit()) throw Error(tr("Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan."));
+        rule = {...(id ? state.automation.find(r => r.id === id) : {id: Date.now(), is_enabled: true, sent_count: 0, last_sent_at: null}), name: values.name, conditions: {operator: 'all', items: [values.keywords.length > 1 ? {type: 'keyword_any', value: values.keywords} : {type: 'keyword_contains', value: values.keywords[0]}, ...(values.days ? [{type: 'days_of_week', value: values.days}] : []), ...(values.time_range ? [{type: 'time_between', value: values.time_range}] : [])]}, action: {type: 'send_reply', text: values.reply}, priority: values.priority};
       }
       if (submittedAccount !== accountKey()) return;
-      state.automation.push(rule);
+      if (id) {
+        const index = state.automation.findIndex(r => r.id === id);
+        if (index >= 0) {
+          // An in-flight edit must not undo a toggle completed while its dialog was closed.
+          const latest = state.automation[index];
+          if (latest.is_enabled !== enabledBeforeSave) rule.is_enabled = latest.is_enabled;
+          state.automation[index] = rule;
+        }
+      } else state.automation.push(rule);
       state.automation.sort((a,b) => a.priority - b.priority || a.id - b.id);
       persist();
       if (form.isConnected) await closeDialog(document.querySelector('#modal'));

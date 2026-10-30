@@ -20,14 +20,14 @@ from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
-from psycopg2.errors import UndefinedTable
+from psycopg2.errors import UndefinedTable, UndefinedColumn
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi import Path as PathParameter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.auth import validate_init_data
@@ -130,9 +130,13 @@ class AutomationTime(Input):
     end: int = Field(ge=0, le=1439, strict=True)
 
 
+AutomationKeyword = Annotated[str, Field(min_length=1, max_length=50)]
+
+
 class AutomationRule(Input):
     name: str = Field(min_length=1, max_length=60)
-    keyword: str = Field(min_length=1, max_length=50)
+    keyword: AutomationKeyword | None = None
+    keywords: list[AutomationKeyword] | None = Field(None, min_length=1, max_length=5)
     reply: str = Field(min_length=1, max_length=500)
     priority: int = Field(100, ge=0, le=10000, strict=True)
     days: list[Annotated[int, Field(ge=0, le=6, strict=True)]] | None = Field(None, min_length=1, max_length=7)
@@ -144,6 +148,33 @@ class AutomationRule(Input):
         if value is not None and len(set(value)) != len(value):
             raise ValueError('Duplicate days')
         return value
+
+    @model_validator(mode='after')
+    def one_keyword_source(self):
+        if (self.keyword is None) == (self.keywords is None):
+            raise ValueError('Supply exactly one keyword source')
+        return self
+
+
+class AutomationEdit(Input):
+    name: str | None = Field(None, min_length=1, max_length=60)
+    keywords: list[AutomationKeyword] | None = Field(None, min_length=1, max_length=5)
+    reply: str | None = Field(None, min_length=1, max_length=500)
+    priority: int | None = Field(None, ge=0, le=10000, strict=True)
+    days: list[Annotated[int, Field(ge=0, le=6, strict=True)]] | None = Field(None, min_length=1, max_length=7)
+    time_range: AutomationTime | None = None
+
+    @field_validator('days')
+    @classmethod
+    def unique_days(cls, value):
+        return AutomationRule.unique_days(value)
+
+    @model_validator(mode='after')
+    def valid_patch(self):
+        values = self.model_dump(exclude_unset=True)
+        if not values or any(value is None for key, value in values.items() if key not in ('days', 'time_range')):
+            raise ValueError('Empty edit or null required field')
+        return self
 
 
 class DeleteConfirmation(Input):
@@ -351,7 +382,7 @@ _automation_lock = threading.Lock()
 def automation_db_call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
-    except UndefinedTable:
+    except (UndefinedTable, UndefinedColumn):
         # The running bot owns schema upgrades. Keep other Web App sections usable
         # when its new Automation migration has not been deployed yet.
         raise HTTPException(503, 'Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.') from None
@@ -366,13 +397,14 @@ def automation_engine():
 def create_automation(body: AutomationRule, user: User):
     uid = user['id']
     current_plan = require(uid, 'automation')
-    smart = body.days is not None or body.time_range is not None
+    keywords = body.keywords if body.keywords is not None else [body.keyword]
+    smart = len(keywords) > 1 or body.days is not None or body.time_range is not None
     if smart and current_plan not in ('pro', 'ultra'):
-        raise HTTPException(403, 'Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.')
+        raise HTTPException(403, 'YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.')
     engine = automation_engine()
     try:
         if smart:
-            items = [{'type': 'keyword_contains', 'value': body.keyword}]
+            items = [{'type': 'keyword_any', 'value': keywords}] if len(keywords) > 1 else [{'type': 'keyword_contains', 'value': keywords[0]}]
             if body.days is not None:
                 items.append({'type': 'days_of_week', 'value': body.days})
             if body.time_range is not None:
@@ -380,7 +412,7 @@ def create_automation(body: AutomationRule, user: User):
             clean = engine.validate_automation(body.name, {'operator': 'all', 'items': items},
                                                {'type': 'send_reply', 'text': body.reply}, body.priority)
         else:
-            clean = engine.make_keyword_rule(body.keyword, body.reply, body.name, body.priority)
+            clean = engine.make_keyword_rule(keywords[0], body.reply, body.name, body.priority)
     except engine.AutomationError:
         message = 'Qoida shartlarini tekshiring.' if smart else 'Kalit so‘z 1–50 belgi va 1–5 so‘z bo‘lsin. * faqat oxirida, kamida 3 harfli so‘zdan keyin yoziladi.'
         raise HTTPException(422, message) from None
@@ -389,6 +421,54 @@ def create_automation(body: AutomationRule, user: User):
     if result is None:
         raise HTTPException(409, 'Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.')
     return {'id': result, 'is_enabled': True, **clean}
+
+
+@app.patch('/api/automation/{entry_id}')
+def edit_automation(entry_id: EntryId, body: AutomationEdit, user: User):
+    uid = user['id']
+    current_plan = require(uid, 'automation')
+    values = body.model_dump(exclude_unset=True)
+    # Only changed fields reach the upstream row-locked merge. A Plus owner can
+    # edit basic fields of a retained smart rule without removing its filters.
+    if current_plan not in ('pro', 'ultra') and (
+        values.get('days') is not None or values.get('time_range') is not None or len(values.get('keywords', [])) > 1
+    ):
+        raise HTTPException(403, 'YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.')
+    if values.get('time_range') is not None:
+        values['time_range'] = (body.time_range.start, body.time_range.end)
+    db, _, _ = modules()
+    engine = automation_engine()
+    try:
+        updated = automation_db_call(db.update_automation_rule, uid, entry_id, **values)
+    except engine.AutomationError:
+        raise HTTPException(422, 'Qoida shartlarini tekshiring.') from None
+    if not updated:
+        raise HTTPException(404, 'Yozuv topilmadi.')
+    # Return current enabled state and counters, never reset them from the form.
+    rows = automation_db_call(db.list_automation_rules, uid)
+    row = next((r for r in rows if r['id'] == entry_id), None)
+    if row is None:
+        raise HTTPException(404, 'Yozuv topilmadi.')
+    return row
+
+
+@app.get('/api/automation/stats')
+def automation_stats(user: User):
+    uid = user['id']
+    require(uid, 'automation')
+    db, _, reports = modules()
+    rows = automation_db_call(db.list_automation_rules, uid)
+    deleted = automation_db_call(db.get_automation_deleted_sent, uid)
+    since = automation_db_call(db.get_automation_counters_since)
+    zone = user_zone(db.get_settings(uid))
+    # The bot's Automation panel uses seven days for every paid plan.
+    summary = reports.summarize(db.get_analytics_rows(uid, reports.period_start(7, zone).timestamp()), 7, zone)
+    top = sorted((r for r in rows if r.get('sent_count', 0) > 0), key=lambda r: (-r['sent_count'], r['id']))[:3]
+    return {'days': 7, 'period_sent': summary['kinds'].get('automation', 0),
+            'all_sent': sum(r.get('sent_count', 0) for r in rows) + deleted,
+            'deleted_sent': deleted, 'counters_since': since,
+            'total_rules': len(rows), 'enabled_rules': sum(bool(r['is_enabled']) for r in rows),
+            'top': [{'id': r['id'], 'name': r['name'], 'sent_count': r['sent_count']} for r in top]}
 
 
 @app.post('/api/automation/{entry_id}/delete-confirmation')
@@ -506,7 +586,7 @@ def analytics(user: User, days: int = Query(1)):
     else:
         series = {'inc': [r[1] for r in summary['daily']], 'sent': [r[2] for r in summary['daily']], 'labels': [r[0].strftime('%d.%m') for r in summary['daily']]}
     p = plan(uid)
-    kinds = {key: summary['kinds'][key] for key in ('ai', 'faq', 'static', 'sleep')} if p in ('pro', 'ultra') else {'ai': summary['kinds']['ai']}
+    kinds = {key: summary['kinds'][key] for key in ('ai', 'faq', 'static', 'sleep', 'automation')} if p in ('pro', 'ultra') else {'ai': summary['kinds']['ai']}
     return {'incoming': summary['incoming'], 'sent': summary['sent'], 'kinds': kinds, 'peak': summary['peak'], 'skipped': summary['skipped'] if p == 'ultra' else None, 'series': series if p != 'free' else None}
 
 

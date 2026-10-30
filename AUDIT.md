@@ -406,3 +406,46 @@ all-plan concurrent last-slot boundaries, strict smart-condition gates and
 Monday22:00–Tuesday06:00 boundary/negation behavior. Node syntax,394-message
 catalog and API-client credential-routing checks passed. Browser results and
 remote CI/deployment proof are recorded in the local session handoff.
+
+
+## Automation v1.2 parity — 2026-10-30
+
+Reviewed original bot `94e23b19eea02ee6f40d48d85c860feb92b87f86` against
+previous pin `65b9a73896ffd86850e04c7ac13e89ab90986c99`: Automation OR matching,
+transactional editing, rule/deleted counters and separate analytics kind. Original
+bot repository unchanged; only the Web App Docker source pin is updated.
+
+- Create accepts exactly one legacy keyword or a bounded keywords list. Original
+  normalization/validation remains authoritative. OR/day/time require Pro/Ultra;
+  Plus2/Pro10/Ultra30 quotas remain atomic and Free stays denied.
+- Partial PATCH allowlists six content fields and passes the verified owner to
+  upstream `update_automation_rule`, which locks the row and merges current data.
+  It cannot set enabled state, owner, IDs or counters. Null only removes optional
+  day/time filters; Plus may clear retained filters. Legacy punctuation and a
+  newer local toggle survive editing. Concurrent separate-field SQL edits merge.
+- Authenticated paid-only Statistics exposes owner counts/top names, no reply text
+  or chat content. Deleted counts persist through the original atomic delete CTE;
+  the real integration suite races a send with deletion and checks exactly one
+  increment. The bot itself records delivery; this adapter never sends Telegram
+  messages or manufactures real counts. Multi-query reads are best-effort and may
+  transiently differ during concurrent updates, as in the bot panel.
+- General analytics now includes the distinct Automation category on Pro/Ultra;
+  the existing lower-plan payload allowlist remains. Unit and SQL regressions
+  check totals without double-counting and deny cross-owner mutation/read leaks.
+- Missing v1.2 columns as well as missing tables return localized setup errors;
+  bootstrap retains other sections. No production migration is run by the adapter.
+- Owner text uses escaping/DOM properties in cards, editor/review and top names.
+  New surfaces inherit existing blur, control/dialog motion, both themes and
+  reduced preferences. Long names/five maximum-length keywords wrap on mobile;
+  invalid stored timezone falls back safely for new counter dates.
+
+Validation:69 local API/auth/security/source/probe tests;15 real PostgreSQL18.6
+integration tests against the exact new bot snapshot;412 complete translations
+and JS URL/redirect tests. All ten browser suites passed; expanded Automation
+regressions additionally cover partial edits, delayed edit vs toggle, retained
+filters after downgrade, escaped statistics, stale responses, long owner text and
+timezone fallback. Screenshots in ignored artifacts. Dependency audit refreshed
+on this date:18 resolved runtime packages, no known vulnerabilities reported.
+CI/Render results for the published commit are recorded separately in local
+continuity notes. No authenticated production DB writes or real Telegram delivery
+were performed; these checks cannot establish the absence of every possible bug.

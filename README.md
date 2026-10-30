@@ -96,7 +96,7 @@ python tests/integration_upstream.py
 
 Use a disposable local database: the harness rejects non-loopback hosts and
 names outside `ar_webapp_test*`. It creates/drops its own random schema, uses
-synthetic Telegram sessions and never starts the bot. It verifies all four imported source hashes
+synthetic Telegram sessions and never starts the bot. It verifies all five imported source hashes
 and the current Docker pin using the freshly prepared manifest. CI prepares this
 input automatically for each run, so changing the pin still runs all contract
 tests. `docs/upstream-integration.json` is a historical audit snapshot, not a
@@ -168,10 +168,10 @@ original `automation.py` validator. Plus allows 2 rules, Pro 10 and Ultra 30 rul
 Free is locked, including direct API calls. Expired subscriptions fall back to
 Free. Saved rules remain in the bot database after downgrade.
 
-Create a keyword/phrase rule with an optional priority (0–10000, lower runs
+Create a keyword/phrase rule (or 2–5 comma-separated OR alternatives on Pro/Ultra) with an optional priority (0–10000, lower runs
 first). Review its name, keyword and exact reply, then **Confirm and enable**.
 New rules are immediately enabled, as in the bot panel. Search, pause/resume
-and delete rules from the same owner-scoped list. Deletion requires a separate
+edit and delete rules from the same owner-scoped list. Deletion requires a separate
 one-use confirmation that expires after two minutes; opening a newer confirmation
 invalidates the older one. The UI and API support Uzbek, Russian and English.
 
@@ -184,7 +184,7 @@ schedules, and respects cooldown, Business permissions and manual owner activity
 The existing reply-preview dialog intentionally tests only FAQ/standard replies.
 
 Deploy/start the updated **bot** first so its own migration creates the table.
-The Web App never runs bot migrations or polling. If this table is missing,
+The Web App never runs bot migrations or polling. If the table or its v1.2 counter columns are missing,
 authenticated bootstrap still works and Automation shows a setup notice;
 Automation writes fail closed with a localized 503. Docker pins the reviewed bot
 commit; CI fingerprints all five imported source modules, including Automation.
@@ -214,3 +214,28 @@ including disabled rules in that count; day/time rules require Pro/Ultra. The
 Web App preserves all saved rules and labels those unavailable on the current
 plan. Auto-Reply now also links directly to Sleep settings, matching the bot's
 new Auto-Reply menu grouping. Existing explicit offline updates stay idempotent.
+
+
+Automation v1.2 (bot commit `94e23b19eea02ee6f40d48d85c860feb92b87f86`)
+adds `keywords` (1–5 strings) as an alternative to the legacy `keyword` field
+on create. Supply exactly one field. Multiple keywords use OR and require
+Pro/Ultra; optional day/time filters still combine with AND. The original
+validator rejects normalized duplicates and invalid prefixes.
+
+`PATCH /api/automation/{id}` accepts only changed name, keywords, reply, priority,
+days and time_range fields. The upstream owner-scoped row-locked transaction
+merges them; enabled state and counters cannot be posted or reset. Null days/time
+remove filters. Plus can remove old filters or replace an OR rule with one keyword;
+it cannot add smart conditions. Unchanged legacy keywords retain their original
+punctuation. A completed local toggle is preserved if an earlier edit response
+arrives later.
+
+The Automation **Statistics** button loads `GET /api/automation/stats` for the
+verified paid owner: seven-day Automation count (matching the bot panel), lifetime
+counters including deleted rules, start date and the top three existing rules.
+Cards show per-rule sent count and last-sent time. General Pro/Ultra analytics
+includes Automation as its own fifth reply category, without counting it again as
+a standard reply. Counter reads are a best-effort snapshot and can briefly differ
+during simultaneous sends/deletes; reopening Statistics refreshes them. Only the
+bot records successful delivery; the Web App preview still sends no messages.
+Deploy the current bot first so it creates the v1.2 columns and history tables.

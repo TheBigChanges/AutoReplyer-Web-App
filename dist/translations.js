@@ -1,13 +1,31 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
-Plus: 2 ta, Pro: 10 ta, Ultra: 30 ta qoida. Kun va vaqt shartlari Pro va Ultra’da. Free’da qoidalar saqlanadi, ammo ishlamaydi.|Plus: 2, Pro: 10, Ultra: 30 правил. Дни и время доступны на Pro и Ultra. На Free правила сохраняются, но не работают.|Plus: 2, Pro: 10, Ultra: 30 rules. Day and time conditions require Pro or Ultra. On Free, rules are kept but do not run.
+YOKI|ИЛИ|OR
+YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.|Условия ИЛИ, по дням и времени доступны только на тарифах Pro и Ultra.|OR, day and time conditions are available only on Pro and Ultra plans.
+Plus: bitta kalit so‘z. Pro/Ultra: vergul bilan ajratilgan 2–5 ta kalit so‘z (YOKI).|Plus: одно ключевое слово. Pro/Ultra: 2–5 ключевых слов через запятую (ИЛИ).|Plus: one keyword. Pro/Ultra: 2–5 comma-separated keywords (OR).
+Ko‘pi bilan 5 ta takrorlanmagan kalit so‘z kiriting.|Введите не более 5 неповторяющихся ключевых слов.|Enter up to 5 distinct keywords.
+O‘zgarishlar saqlanadi. Qoidaning yoqilgan holati va hisoblagichlari saqlanib qoladi.|Изменения сохранятся. Состояние и счётчики правила останутся прежними.|Changes will be saved. The rule's enabled state and counters will be preserved.
+Oxirgi javob: {0}|Последний ответ: {0}|Last reply: {0}
+Automation statistikasi|Статистика автоматизации|Automation statistics
+Jami qoidalar|Всего правил|Total rules
+Yoqilgan qoidalar: {0}|Включённых правил: {0}|Enabled rules: {0}
+Oxirgi 7 kundagi javoblar|Ответов за последние 7 дней|Replies in the last 7 days
+Tarixiy jami javoblar|Ответов за всё время|All-time replies
+O‘chirilgan qoidalardan: {0}|Из удалённых правил: {0}|From deleted rules: {0}
+Hisob boshlangan vaqt: {0}|Начало подсчёта: {0}|Counters started: {0}
+Eng ko‘p ishlatilgan qoidalar|Самые используемые правила|Most used rules
+Hali javob yuborilmagan.|Пока нет отправленных ответов.|No replies sent yet.
+Hisoblagichlar taxminiy: avvalgi xabarlar tiklanmaydi. Mijoz xabarlari va chat ID bu statistikada saqlanmaydi.|Подсчёт приблизительный: старые сообщения не восстанавливаются. Тексты сообщений и ID чатов в этой статистике не хранятся.|Counters are best-effort: earlier messages cannot be recovered. This statistics view stores no customer messages or chat IDs.
+Kun shartini olib tashlash|Убрать условие по дням|Remove days filter
+Vaqt shartini olib tashlash|Убрать условие по времени|Remove time filter
+Plus: 2 ta, Pro: 10 ta, Ultra: 30 ta qoida. YOKI, kun va vaqt shartlari Pro va Ultra’da. Free’da qoidalar saqlanadi, ammo ishlamaydi.|Plus: 2, Pro: 10, Ultra: 30 правил. ИЛИ, дни и время доступны на Pro и Ultra. На Free правила сохраняются, но не работают.|Plus: 2, Pro: 10, Ultra: 30 rules. OR, day and time conditions require Pro or Ultra. On Free, rules are kept but do not run.
 2 ta avtomatlashtirish qoidasi|2 правила автоматизации|2 automation rules
 10 ta avtomatlashtirish qoidasi|10 правил автоматизации|10 automation rules
 30 ta avtomatlashtirish qoidasi|30 правил автоматизации|30 automation rules
 Smart shartlar (Pro / Ultra)|Умные условия (Pro / Ultra)|Smart conditions (Pro / Ultra)
 Kunlar ixtiyoriy. Tanlamasangiz har kuni ishlaydi. Vaqtni bo‘sh qoldirsangiz cheklanmaydi. Barcha shartlar birga bajariladi (AND).|Дни необязательны: без выбора правило работает ежедневно. Пустое время означает отсутствие ограничения. Все условия должны совпасть (И).|Days are optional: leave all clear for every day. Leave times empty for no time limit. All conditions must match (AND).
 Yarim tundan o‘tuvchi oraliq boshlangan kunga tegishli. Boshlanish va tugash farq qilsin.|Ночной интервал относится ко дню начала. Начало и конец должны различаться.|Overnight windows belong to their starting day. Start and end must differ.
-Hozirgi tarifda ishlamaydi. Faqat limitdagi eng eski qoidalar hisoblanadi; kun/vaqt shartlari Pro va Ultra’da.|Не работает на текущем тарифе. Учитываются старейшие правила в пределах лимита; дни и время требуют Pro или Ultra.|Inactive on this plan. Only the oldest rules within the limit are considered; day/time conditions require Pro or Ultra.
+Hozirgi tarifda ishlamaydi. Faqat limitdagi eng eski qoidalar hisoblanadi; YOKI va kun/vaqt shartlari Pro va Ultra’da.|Не работает на текущем тарифе. Учитываются старейшие правила в пределах лимита; ИЛИ, дни и время требуют Pro или Ultra.|Inactive on this plan. Only the oldest rules within the limit are considered; OR, day/time conditions require Pro or Ultra.
 Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.|Условия по дням и времени доступны только на Pro и Ultra.|Day and time conditions require Pro or Ultra.
 Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.|Достигнут лимит правил автоматизации вашего тарифа.|Your plan’s automation rule limit has been reached.
 Bot yangilanishi kutilmoqda|Ожидается обновление бота|Waiting for the bot update

@@ -254,6 +254,95 @@ class UpstreamIntegrationTests(unittest.TestCase):
             self.assertFalse(engine.rule_matches('night',rule,when=(0,1400),allow_smart=False))
             self.assertEqual(self.request('POST','/api/automation',uid=uid,json={**body,'time_range':{'start':0,'end':0}}).status_code,422)
 
+
+    def test_v12_or_edit_preserves_state_counters_and_plan_boundaries(self):
+        engine = self.adapter.automation_engine()
+        body = {'name':'OR rule','keywords':['narx*','qancha','price'],'reply':'Original','days':[0], 'time_range':{'start':1320,'end':360}}
+        r = self.request('POST','/api/automation',json=body)
+        self.assertEqual(r.status_code,200,r.text)
+        entry = r.json()['id']
+        self.assertTrue(engine.rule_matches('qancha', r.json(), when=(1,60)))
+        self.assertFalse(engine.rule_matches('qancha', r.json(), when=(1,360)))
+        self.assertFalse(engine.rule_matches('narx emas', r.json(), when=(0,1400)))
+        self.db.record_automation_sent(self.uid,entry)
+        self.db.set_automation_rule_enabled(self.uid,entry,False)
+        edited = self.request('PATCH',f'/api/automation/{entry}',json={'name':'Edited','priority':2})
+        self.assertEqual(edited.status_code,200,edited.text)
+        row = edited.json()
+        self.assertEqual(engine.split_keywords(row),body['keywords'])
+        self.assertEqual(row['sent_count'],1)
+        self.assertIsNotNone(row['last_sent_at'])
+        self.assertFalse(row['is_enabled'])
+        self.assertEqual((row['name'],row['priority']),('Edited',2))
+        other = self.owner('ultra')
+        self.assertEqual(self.request('PATCH',f'/api/automation/{entry}',uid=other,json={'reply':'Intrusion'}).status_code,404)
+        for keywords in [['narx','NARX'], ['o‘zbek',"o'zbek"], ['x']*6, ['na*'], ['na*rx']]:
+            self.assertEqual(self.request('PATCH',f'/api/automation/{entry}',json={'keywords':keywords}).status_code,422,keywords)
+        self.assertEqual(self.db.list_automation_rules(self.uid)[0]['action']['text'],'Original')
+        self.db.set_user_plan(self.uid,'plus')
+        for changes in [{'keywords':['one','two']},{'days':[1]},{'time_range':{'start':1,'end':2}}]:
+            self.assertEqual(self.request('PATCH',f'/api/automation/{entry}',json=changes).status_code,403)
+        self.assertEqual(self.request('PATCH',f'/api/automation/{entry}',json={'reply':'Basic edit'}).status_code,200)
+        retained = self.db.list_automation_rules(self.uid)[0]
+        retained['is_enabled'] = True
+        self.assertFalse(engine.rule_matches('qancha',retained,when=(1,60),allow_smart=False))
+        # A downgrade can remove filters and replace OR with one keyword.
+        changed = self.request('PATCH',f'/api/automation/{entry}',json={'keywords':['narx*'],'days':None,'time_range':None})
+        self.assertEqual(changed.status_code,200,changed.text)
+        self.assertEqual(len(changed.json()['conditions']['items']),1)
+        self.assertEqual(changed.json()['sent_count'],1)
+        self.assertFalse(changed.json()['is_enabled'])
+        self.assertEqual(self.request('POST','/api/automation',json=body).status_code,403)
+
+    def test_v12_parallel_partial_edits_merge_without_resetting_other_fields(self):
+        entry = self.request('POST','/api/automation',json={'name':'Before','keyword':'hello','reply':'Before'}).json()['id']
+        barrier = Barrier(2)
+        def change(values):
+            barrier.wait(timeout=10)
+            return self.request('PATCH',f'/api/automation/{entry}',json=values).status_code
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            codes = list(pool.map(change,[{'name':'After name'}, {'reply':'After reply'}]))
+        self.assertEqual(codes,[200,200])
+        row = self.db.list_automation_rules(self.uid)[0]
+        self.assertEqual((row['name'],row['action']['text']),('After name','After reply'))
+        self.assertEqual(row['sent_count'],0)
+        self.assertTrue(row['is_enabled'])
+
+    def test_v12_counters_deletion_race_and_owner_scoped_statistics(self):
+        entry = self.request('POST','/api/automation',json={'name':'Counter','keyword':'counter','reply':'Private answer'}).json()['id']
+        other = self.owner('ultra')
+        self.assertFalse(self.db.record_automation_sent(other,entry))
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            self.assertTrue(all(pool.map(lambda _:self.db.record_automation_sent(self.uid,entry),range(8))))
+        self.db.add_automation_deleted_sent(other,999)
+        self.db.record_analytics(self.uid,'automation',n=4)
+        self.db.record_analytics(self.uid,'automation',n=2,ts=time.time()-10*86400)
+        stats = self.request('GET','/api/automation/stats').json()
+        self.assertEqual((stats['all_sent'],stats['period_sent']),(8,4))
+        self.assertEqual(stats['top'],[{'id':entry,'name':'Counter','sent_count':8}])
+        self.assertIsNotNone(stats['counters_since'])
+        token = self.request('POST',f'/api/automation/{entry}/delete-confirmation').json()['token']
+        barrier = Barrier(2)
+        def send():
+            barrier.wait(timeout=10)
+            if not self.db.record_automation_sent(self.uid,entry):
+                self.db.add_automation_deleted_sent(self.uid)
+        def delete():
+            barrier.wait(timeout=10)
+            return self.request('DELETE',f'/api/automation/{entry}',json={'token':token}).status_code
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            sent = pool.submit(send); deleted = pool.submit(delete)
+            sent.result(); self.assertEqual(deleted.result(),200)
+        stats = self.request('GET','/api/automation/stats').json()
+        self.assertEqual((stats['all_sent'],stats['deleted_sent'],stats['total_rules']),(9,9,0))
+        self.assertEqual(stats['top'],[])
+        self.assertEqual(self.db.get_automation_deleted_sent(other),999)
+        self.assertEqual(self.request('PATCH',f'/api/automation/{entry}',json={'name':'Gone'}).status_code,404)
+        self.db.set_user_plan(self.uid,'plus')
+        self.assertEqual(self.request('GET','/api/automation/stats').status_code,200)
+        self.db.set_user_plan(self.uid,'free')
+        self.assertEqual(self.request('GET','/api/automation/stats').status_code,403)
+
     def test_automation_plan_expiry_and_atomic_last_slot_for_all_paid_plans(self):
         engine = self.adapter.automation_engine()
         body = {'name':'Boundary','keyword':'boundary','reply':'A','priority':100}
@@ -281,7 +370,7 @@ class UpstreamIntegrationTests(unittest.TestCase):
 
     def test_analytics_real_counters_periods_and_plan_payload(self):
         other=self.owner('ultra')
-        for kind,n in [('incoming',13),('ai',2),('faq',3),('static',1),('sleep',1),('skipped',4)]:
+        for kind,n in [('incoming',13),('ai',2),('faq',3),('static',1),('sleep',1),('automation',2),('skipped',4)]:
             self.db.record_analytics(self.uid,kind,n=n)
         self.db.record_analytics(self.uid,'incoming',ts=time.time()-2*86400,n=5)
         self.db.record_analytics(other,'incoming',n=999)
@@ -294,15 +383,15 @@ class UpstreamIntegrationTests(unittest.TestCase):
                     continue
                 data=response.json()
                 self.assertEqual(data['incoming'],13 if days==1 else 18)
-                self.assertEqual(data['sent'],7)
-                self.assertEqual(set(data['kinds']),{'ai','faq','static','sleep'} if plan in ['pro','ultra'] else {'ai'})
+                self.assertEqual(data['sent'],9)
+                self.assertEqual(set(data['kinds']),{'ai','faq','static','sleep','automation'} if plan in ['pro','ultra'] else {'ai'})
                 self.assertEqual(data['skipped'],4 if plan=='ultra' else None)
                 self.assertNotIn('skipped',data['kinds'])
                 if plan=='free':
                     self.assertIsNone(data['series'])
                 else:
                     self.assertEqual(sum(data['series']['inc']),data['incoming'])
-                    self.assertEqual(sum(data['series']['sent']),7)
+                    self.assertEqual(sum(data['series']['sent']),9)
                     self.assertEqual(len(data['series']['labels']),24 if days==1 else days)
 
     def test_preview_is_saved_faq_or_standard_without_ai_or_message_side_effects(self):

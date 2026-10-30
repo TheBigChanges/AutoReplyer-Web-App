@@ -10,6 +10,7 @@ def language_code(value: str | None) -> str:
 MESSAGES = {
     'Qoida shartlarini tekshiring.': ('Проверьте условия правила.', 'Check the rule conditions.'),
     'Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.': ('Условия по дням и времени доступны только на Pro и Ultra.', 'Day and time conditions require Pro or Ultra.'),
+    'YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.': ('Условия ИЛИ, по дням и времени доступны только на тарифах Pro и Ultra.', 'OR, day and time conditions are available only on Pro and Ultra plans.'),
     'Avtomatlashtirish uchun tarifingizdagi qoidalar limiti to‘lgan.': ('Достигнут лимит правил автоматизации вашего тарифа.', 'Your plan’s automation rule limit has been reached.'),
     'Avval botning yangi versiyasini ishga tushiring. Avtomatlashtirish bazasi hali tayyor emas.': ('Сначала запустите новую версию бота. База автоматизации ещё не готова.', 'Start the updated bot first. The Automation database is not ready yet.'),
     'Avtomatlashtirish limiti to‘lgan: ko‘pi bilan 20 ta qoida.': ('Достигнут лимит автоматизации: не более 20 правил.', 'Automation limit reached: at most 20 rules.'),

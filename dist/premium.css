@@ -426,3 +426,18 @@ dialog::backdrop { background: #102c246b; }
 @media (prefers-reduced-transparency: reduce) { .automation-review { background: var(--raised); backdrop-filter: none; -webkit-backdrop-filter: none; } }
 
 .automation-smart{border:1px solid var(--line);border-radius:14px;padding:16px;margin:24px 0;background:var(--raised)}.automation-smart legend{font-size:12px;font-weight:600;padding:0 8px}.automation-smart:disabled{opacity:.65}
+
+/* Automation v1.2 uses the shared motion, glass and reduced-preference tokens. */
+.automation-counter {display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:12px 0; color:var(--muted); border-top:1px solid var(--line); font-size:12px}
+.automation-counter > span {display:flex; align-items:center; gap:7px}
+.automation-counter svg {width:15px; height:15px}
+.automation-stats {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:20px 0}
+.automation-stats .stat:last-child {grid-column:1/-1}
+.automation-stats .stat {min-width:0; padding:18px}
+.automation-stats .stat-value {font-size:30px}
+.automation-top .feature-row {min-width:0}
+.automation-top strong {overflow-wrap:anywhere}
+@media(max-width:380px) {.automation-stats {grid-template-columns:minmax(0,1fr)} .automation-counter {align-items:flex-start; flex-direction:column}}
+
+.automation-rule .chip {max-width:100%; white-space:normal; overflow-wrap:anywhere}
+.automation-rule .entry-title h3 {min-width:0; overflow-wrap:anywhere}
