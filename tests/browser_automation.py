@@ -115,7 +115,7 @@ with sync_playwright() as p:
         assert not page.locator('#automation-review script').count()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         blur = page.locator('#automation-review').evaluate('(el)=>getComputedStyle(el).backdropFilter')
-        assert 'blur(14px)' in blur, blur
+        assert 'blur(23px)' in blur, blur
         page.locator('[data-action=automation-back]').click()
         expect(page.locator('textarea[name=reply]')).to_have_value('Original reply 🌿')
         page.keyboard.press('Escape'); expect(page.locator('#modal')).not_to_be_visible()

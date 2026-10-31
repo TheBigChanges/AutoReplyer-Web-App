@@ -239,3 +239,15 @@ a standard reply. Counter reads are a best-effort snapshot and can briefly diffe
 during simultaneous sends/deletes; reopening Statistics refreshes them. Only the
 bot records successful delivery; the Web App preview still sends no messages.
 Deploy the current bot first so it creates the v1.2 columns and history tables.
+
+
+Floating glass uses shared blur radii in `dist/styles.css` (about 1.65x the original
+values): dock 33px, back 20px, menus/dialogs 36px, modal backdrop 13px,
+header/toast 26px and Automation review 23px. Tinted surfaces remain readable in
+both themes, with opaque fallbacks and a reduced-transparency override. Blur
+stays fixed rather than animating each frame. Clicked SVG icons get a short,
+cancellable scale/rotation effect that also works with keyboard activation and
+respects reduced motion. Motion/browser regressions cover cleanup and both
+accessibility preferences.
+The header paints its glass on a noninteractive pseudo-element so that its
+language menu can blur the page without being bounded by an ancestor's backdrop.

@@ -270,6 +270,19 @@ function pressFeedback(target, point) {
   if (animation) animation.finished.then(() => wave.remove(), () => wave.remove()); else wave.remove();
 }
 
+// Animate only the glyph, preserving the control's layout and CSS hover/active transform.
+function iconPress(target) {
+  if (!target || target.matches(':disabled,[aria-disabled="true"],[aria-busy="true"]') || reducedMotion.matches) return;
+  const icon = target.querySelector('svg');
+  if (!icon) return;
+  const style = getComputedStyle(icon);
+  animate(icon, [
+    {scale: style.scale === 'none' ? '1' : style.scale, rotate: style.rotate === 'none' ? '0deg' : style.rotate},
+    {scale: '.91', rotate: '-4deg', offset: .25},
+    {scale: '1', rotate: '0deg'}
+  ], {duration: motion.control});
+}
+
 export function initInteractions({changeLanguage, reportError}) {
   document.addEventListener('change', event => {
     if (!event.target.matches('.day-picker input,.role-option input')) return;
@@ -284,6 +297,8 @@ export function initInteractions({changeLanguage, reportError}) {
   document.addEventListener('click', async event => {
     // Keyboard and assistive activation get the same feedback, centered.
     if (event.detail === 0) pressFeedback(event.target.closest(pressTargets));
+    // Run after the app's click handler: theme/navigation may have replaced the SVG.
+    iconPress(event.target.closest(`${pressTargets},a`));
     const trigger = event.target.closest('[data-language-trigger]');
     if (trigger) {
       if (trigger.getAttribute('aria-expanded') === 'true') closeMenu(trigger, true); else openMenu(trigger);

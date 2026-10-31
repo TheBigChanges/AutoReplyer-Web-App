@@ -71,6 +71,46 @@ with sync_playwright() as p:
     page.keyboard.press('Escape')
     expect(page.locator('#modal')).not_to_be_visible()
 
+    # A click animates the replacement theme SVG; keyboard gets the same effect.
+    for activation in ['pointer', 'keyboard']:
+        theme = page.locator('#theme-button')
+        if activation == 'pointer': theme.click()
+        else:
+            theme.focus();page.keyboard.press('Enter')
+        effect = page.locator('#theme-button svg').evaluate("""el => {
+          const animation = el.getAnimations().find(a => a.effect.getKeyframes().some(f => 'scale' in f));
+          if (!animation) return null;
+          animation.pause();animation.currentTime = animation.effect.getTiming().duration * .25;
+          const s = getComputedStyle(el), bounds = el.parentElement.getBoundingClientRect();
+          return {scale:Number(s.scale),rotate:parseFloat(s.rotate),width:bounds.width,height:bounds.height};
+        }""")
+        assert effect and .89 <= effect['scale'] < 1 and abs(effect['rotate']) <= 5, effect
+        assert effect['width'] >= 31 and effect['height'] >= 31,effect
+        page.locator('#theme-button svg').evaluate('el => el.getAnimations().forEach(a=>a.play())')
+        page.wait_for_timeout(350)
+        assert page.locator('#theme-button svg').evaluate('el=>el.getAnimations().length') == 0
+    # Rapid presses retarget smoothly and release all animation resources.
+    page.evaluate("document.querySelector('#header-language').click(); document.querySelector('#header-language').click(); document.querySelector('#header-language').click()")
+    page.wait_for_timeout(500)
+    page.keyboard.press('Escape');expect(page.locator('#header-language-menu')).to_be_hidden()
+
+    # Frosted floating layers use stronger fixed radii, with an opaque opt-out.
+    assert page.locator('.topbar').evaluate('el=>getComputedStyle(el).backdropFilter') == 'none'
+    assert page.locator('.topbar').evaluate("el=>getComputedStyle(el,'::before').backdropFilter") == 'blur(26px)'
+    assert page.locator('.mobile-nav').evaluate('el=>getComputedStyle(el).backdropFilter').startswith('blur(33px)')
+    page.locator('#header-language').click()
+    assert page.locator('#header-language-menu').evaluate('el=>getComputedStyle(el).backdropFilter').startswith('blur(36px)')
+    page.keyboard.press('Escape');expect(page.locator('#header-language-menu')).to_be_hidden()
+    page.locator('[data-action=add-faq]').click()
+    assert page.locator('#modal').evaluate("el=>getComputedStyle(el,'::backdrop').backdropFilter") == 'blur(13px)'
+    page.keyboard.press('Escape');expect(page.locator('#modal')).not_to_be_visible()
+    cdp = context.new_cdp_session(page)
+    cdp.send('Emulation.setEmulatedMedia', {'features':[{'name':'prefers-reduced-transparency','value':'reduce'}]})
+    assert page.locator('.mobile-nav').evaluate('el=>getComputedStyle(el).backdropFilter') == 'none'
+    assert page.locator('.topbar').evaluate("el=>getComputedStyle(el,'::before').backdropFilter") == 'none'
+    cdp.send('Emulation.setEmulatedMedia', {'features':[]})
+    cdp.detach()
+
     # Frequent route updates should settle precisely under the final tab.
     page.evaluate("location.hash='dashboard'; setTimeout(()=>location.hash='replies',35); setTimeout(()=>location.hash='faq',70); setTimeout(()=>location.hash='dashboard',105)")
     page.wait_for_timeout(850)
@@ -88,10 +128,12 @@ with sync_playwright() as p:
     page.evaluate("document.querySelector('#header-language').click()")
     page.emulate_media(reduced_motion='reduce')
     page.wait_for_timeout(80)
+    page.locator('#theme-button').click()
+    assert page.locator('#theme-button svg').evaluate('el=>el.getAnimations().length') == 0
     assert page.evaluate('document.getAnimations().length') == 0
     page.keyboard.press('Escape')
     expect(page.locator('#header-language-menu')).to_be_hidden()
     assert page.evaluate("[...document.querySelectorAll('*')].filter(el=>el.style.willChange).length") == 0
     assert not errors, errors
-    print(json.dumps({'checks': ['menu reversal continuity', 'dialog reversal continuity', 'rapid dock settling', 'animation and layer cleanup', 'runtime reduced motion'], 'page_errors': errors}))
+    print(json.dumps({'checks': ['menu reversal continuity', 'dialog reversal continuity', 'rapid dock settling', 'animation and layer cleanup', 'runtime reduced motion', 'pointer and keyboard icon press', 'rapid icon cleanup', 'stronger glass and reduced transparency'], 'page_errors': errors}))
     browser.close()

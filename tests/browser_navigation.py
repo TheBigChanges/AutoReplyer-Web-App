@@ -69,7 +69,7 @@ with sync_playwright() as p:
         assert box['x'] >= 0 and box['x'] + box['width'] < picker['x']
         assert box['y'] >= 0 and box['y'] + box['height'] <= 844
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        assert 'blur(12px)' in back.evaluate('(n)=>getComputedStyle(n).backdropFilter')
+        assert 'blur(20px)' in back.evaluate('(n)=>getComputedStyle(n).backdropFilter')
         if width == 320:
             page.screenshot(path='artifacts/back-button-mobile-light.png')
             page.locator('#theme-button').click()

@@ -246,9 +246,12 @@ dialog::backdrop { background: #102c246b; }
 .dark .top-actions .avatar { background: #344c32; color: #d4dfc0; box-shadow: 0 0 0 1px var(--line); }
 .dark .plan-card.recommended .button.primary { background: linear-gradient(120deg, #eee2b9, #d5c394); color: #264130; border-color: #e3d3a9; }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
-  .topbar { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-  .language-menu, dialog { background: #ffffffed; }
-  .dark .language-menu, .dark dialog { background: #192b23f5; }
+  /* Keep header glass on a sibling paint layer so its menu can sample the page. */
+  .topbar, .dark .topbar { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .topbar::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: #ffffffb8; -webkit-backdrop-filter: blur(var(--blur-chrome)); backdrop-filter: blur(var(--blur-chrome)); }
+  .dark .topbar::before { background: #15251ed9; }
+  .language-menu, dialog { background: #ffffffdb; }
+  .dark .language-menu, .dark dialog { background: #192b23e0; }
 }
 @media (min-width: 1600px) { :root { --sidebar-width: 276px; --content-gutter: 46px; } main { padding-top: 40px; } .welcome-card { min-height: 270px; padding: 36px; } .welcome-art { right: 60px; top: -32px; } }
 @media (max-width: 1280px) {
@@ -363,7 +366,7 @@ dialog::backdrop { background: #102c246b; }
   .mobile-nav-label { font-size: 8px; }
   .dark .mobile-nav { background: #1b2e23; border-color: #75896838; box-shadow: 0 10px 40px #0005, inset 0 1px #ffffff0d; }
   .dark .mobile-nav-indicator { background: #3a5034; }
-  @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { .mobile-nav { background: #ffffffe0; } .dark .mobile-nav { background: #1b2e23e8; } }
+  @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { .mobile-nav { background: #ffffffc7; } .dark .mobile-nav { background: #1b2e23d1; } }
 }
 @media (max-width: 360px) {
   :root { --content-gutter: 14px; }
@@ -394,7 +397,7 @@ dialog::backdrop { background: #102c246b; }
   .day-picker span { min-width: 27px; padding-inline: 6px; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .topbar, .dark .topbar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .topbar, .dark .topbar, .topbar::before, .dark .topbar::before { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 /* Automation uses the shared motion, dialog glass and control feedback. */
@@ -415,8 +418,8 @@ dialog::backdrop { background: #102c246b; }
 .automation-review h3 { margin: 18px 0 12px; overflow-wrap: anywhere; }
 .automation-review .chat-bubble { margin: 18px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .automation-review .chip { white-space: normal; overflow-wrap: anywhere; }
-@supports (backdrop-filter: blur(14px)) {
-  .automation-review { background: color-mix(in srgb, var(--raised) 90%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+@supports (backdrop-filter: blur(1px)) {
+  .automation-review { background: color-mix(in srgb, var(--raised) 84%, transparent); backdrop-filter: blur(var(--blur-review)); -webkit-backdrop-filter: blur(var(--blur-review)); }
 }
 @media (max-width: 660px) {
   .automation-flow { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px 0 18px; }
