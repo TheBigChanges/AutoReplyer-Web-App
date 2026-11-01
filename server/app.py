@@ -69,7 +69,7 @@ def modules():
     with _module_lock:
         if _modules is None:
             root = Path(os.environ.get('AUTOREPLYER_SOURCE', '')).resolve()
-            if not os.environ.get('AUTOREPLYER_SOURCE') or not all((root / f).is_file() for f in ['db.py', 'logic.py', 'i18n.py', 'analytics.py', 'automation.py']):
+            if not os.environ.get('AUTOREPLYER_SOURCE') or not all((root / f).is_file() for f in ['db.py', 'logic.py', 'i18n.py', 'analytics.py', 'automation.py', 'payments.py']):
                 raise HTTPException(503, 'AUTOREPLYER_SOURCE yangi AutoReplyer kodi papkasiga ko‘rsatilishi kerak.')
             sys.path.insert(0, str(root))
             _modules = tuple(importlib.import_module(name) for name in ['db', 'logic', 'analytics'])
@@ -310,6 +310,27 @@ def bootstrap(user: User):
     return {'user': {'id': uid, 'first_name': user.get('first_name', 'Foydalanuvchi')},
             'language': bot_language if bot_language in ('uz', 'ru', 'en') else user.get('language_code', 'uz'),
             'plan': current_plan, 'connection': {k: connection.get(k) for k in ['is_enabled', 'can_reply']} if connection else None, 'settings': settings, 'faq': db.list_faq_entries(uid), 'knowledge': db.list_kb_entries(uid), 'schedules': db.list_schedule_rules(uid), 'automation': rules, 'automation_available': automation_available, 'ai_usage': db.get_ai_usage(uid, datetime.now(zone).date().isoformat())}
+
+
+@app.get('/api/billing')
+def billing(user: User):
+    """Read-only owner view. Orders, checkout and activation stay in the bot."""
+    db, _, _ = modules()
+    pricing = importlib.import_module('payments')
+    uid = user['id']
+    try:
+        current = db.get_user_plan_state(uid)
+        history = db.list_user_payments(uid, limit=20)
+    except (UndefinedTable, UndefinedColumn):
+        raise HTTPException(503, 'To‘lov ma’lumotlari hali tayyor emas. Botning yangi versiyasini ishga tushiring.') from None
+    # Do not expose invoice tokens, charge IDs, buyer IDs, snapshots or audit data.
+    fields = ('id', 'kind', 'plan', 'months', 'stars', 'credit', 'status', 'created_at', 'paid_at', 'refunded_at')
+    return {'currency': 'XTR', 'plan': current.plan, 'expires_at': current.expires_at,
+            'effective_plan': plan(uid),
+            'catalog': [{'months': months, 'discount': pricing.DURATION_DISCOUNT[months],
+                         'prices': {key: pricing.stars_price(key, months) for key in ('plus', 'pro', 'ultra')}}
+                        for months in pricing.DURATIONS],
+            'history': [{key: row.get(key) for key in fields} for row in history]}
 
 
 @app.patch('/api/settings')

@@ -1,5 +1,29 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
+Yangilash|Обновить|Refresh
+Bepul|Бесплатно|Free
+Obuna va to‘lovlar|Подписка и платежи|Subscription and payments
+Xaridlar tarixi|История покупок|Purchase history
+Obuna muddati|Срок подписки|Subscription duration
+{0} oy|{0} мес.|{0} months
+Amal qilish muddati: {0}|Действует до: {0}|Valid until: {0}
+Amaldagi ruxsatlar|Доступные права|Effective access
+Muddatsiz|Бессрочно|Unlimited
+To‘lov ma’lumotlari yuklanmoqda…|Загрузка данных платежей…|Loading payment data…
+Avval to‘lov ma’lumotlarini yangilang.|Сначала обновите данные платежей.|Refresh payment data first.
+Bir martalik to‘lov. Avtomatik yechib olish yo‘q. Yakuniy summa va tarif almashinuvi botda tasdiqlanadi.|Разовый платёж без автосписаний. Итоговая сумма и смена тарифа подтверждаются в боте.|One-time payment without automatic billing. Confirm the final amount and plan changes in the bot.
+To‘lov Telegram Stars orqali botda amalga oshiriladi. Bot → Tariflar bo‘limida tarif va muddatni tanlang. Faqat tasdiqlangan to‘lovdan keyin obuna faollashadi.|Оплата Telegram Stars проходит в боте. В разделе Бот → Тарифы выберите тариф и срок. Подписка активируется только после подтверждённой оплаты.|Pay with Telegram Stars in the bot. Open Bot → Plans and select a plan and duration. Only a confirmed payment activates the subscription.
+Oxirgi 20 ta buyurtma. Bekor qilingan buyurtmalar ko‘rsatilmaydi.|Последние 20 заказов. Отменённые заказы не отображаются.|Latest 20 orders. Cancelled orders are excluded.
+Hali xaridlar yo‘q.|Покупок пока нет.|No purchases yet.
+To‘lov yordami va qaytarish masalalari: botda /paysupport.|Помощь по оплате и возвратам: /paysupport в боте.|Payment and refund support: /paysupport in the bot.
+Kutilmoqda|Ожидает оплаты|Pending
+To‘langan|Оплачено|Paid
+Qaytarish jarayonida|Возврат в процессе|Refund in progress
+Qaytarilgan|Возвращено|Refunded
+Muddati tugagan|Истёк|Expired
+Tarif almashtirilgan|Тариф изменён|Plan switched
+Tekshirilmoqda|На проверке|Under review
+Bekor qilingan|Отменено|Cancelled
 YOKI|ИЛИ|OR
 YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.|Условия ИЛИ, по дням и времени доступны только на тарифах Pro и Ultra.|OR, day and time conditions are available only on Pro and Ultra plans.
 Plus: bitta kalit so‘z. Pro/Ultra: vergul bilan ajratilgan 2–5 ta kalit so‘z (YOKI).|Plus: одно ключевое слово. Pro/Ultra: 2–5 ключевых слов через запятую (ИЛИ).|Plus: one keyword. Pro/Ultra: 2–5 comma-separated keywords (OR).

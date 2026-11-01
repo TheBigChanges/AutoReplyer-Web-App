@@ -251,3 +251,38 @@ respects reduced motion. Motion/browser regressions cover cleanup and both
 accessibility preferences.
 The header paints its glass on a noninteractive pseudo-element so that its
 language menu can blur the page without being bounded by an ancestor's backdrop.
+
+
+## Telegram Stars billing sync — 2026-11-01
+
+Docker pins bot `b1358fad359082e83f9af5172b35d97e157c3f90`. The pinned
+`payments.py` is included in the six-module source manifest. Deploy the updated
+original bot first: it creates payment tables and the subscription-rate column.
+The Web App never runs schema migrations or starts bot handlers.
+
+Plans now show authoritative XTR prices from upstream for 1/3/6/12 months,
+discounts, actual purchased plan and expiry, and effective administrator access
+separately. GET `/api/billing` uses the authenticated owner and returns at most
+20 recent non-cancelled orders. Invoice tokens, Telegram charge IDs, buyer IDs,
+plan snapshots, grant accounting and audit details are excluded. Missing schema
+returns a localized 503 in Plans without breaking other sections.
+
+Checkout, final upgrade credits, downgrade value transfers, activation and refunds
+remain in the bot, as requested. Open Bot → Plans to purchase, or `/paysupport`
+for support. No Web App invoice or refund write route is added. A pending order
+or checkout completion callback is never treated as an active subscription.
+Refresh Plans after returning from the bot; this view does not automatically poll.
+Prices are one-time totals for the selected duration, without recurring billing.
+
+The existing porcelain/evergreen/champagne system, shared page/dialog motion,
+36px dialog glass and reduced preferences apply to billing. The five mobile dock
+routes stay intact. All UI labels support Uzbek, Russian and English. Demo prices
+are labeled by the existing demo banner; live price failures show an error/retry
+rather than substituting demo figures. Payment data stays in memory for the current
+account and is not written to browser storage.
+
+`tests/browser_billing.py` joins browser CI, covering retry, delayed GET across
+navigation, escaped history, duration prices, 3 locales × 4 widths × 2 themes,
+glass and reduced motion. `tests/test_billing.py` verifies owner scoping, sensitive
+field exclusion, unsigned/mutation rejection and missing schema. The real SQL suite
+also checks owner billing data against the exact Docker pin.

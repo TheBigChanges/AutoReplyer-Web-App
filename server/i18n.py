@@ -8,6 +8,7 @@ def language_code(value: str | None) -> str:
 
 
 MESSAGES = {
+    'To‘lov ma’lumotlari hali tayyor emas. Botning yangi versiyasini ishga tushiring.': ('Данные платежей ещё не готовы. Запустите новую версию бота.', 'Payment data is not ready. Start the updated bot first.'),
     'Qoida shartlarini tekshiring.': ('Проверьте условия правила.', 'Check the rule conditions.'),
     'Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.': ('Условия по дням и времени доступны только на Pro и Ultra.', 'Day and time conditions require Pro or Ultra.'),
     'YOKI, kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.': ('Условия ИЛИ, по дням и времени доступны только на тарифах Pro и Ultra.', 'OR, day and time conditions are available only on Pro and Ultra plans.'),

@@ -166,3 +166,6 @@ button:not(:disabled):not([aria-busy=true]):active,.button:active,.quick-item:ac
 @media(prefers-reduced-motion:reduce){dialog::backdrop{animation:none!important}}
 
 [hidden]{display:none!important}
+
+/* Billing shares the existing surface, motion, focus and glass tokens. */
+.billing-summary{margin-bottom:24px}.billing-summary .card-head{flex-wrap:wrap;gap:12px}.billing-durations{flex-wrap:wrap;margin:20px 0 14px}.billing-durations .button{min-height:44px}.billing-history .feature-row{flex-wrap:wrap;gap:12px}.billing-history .feature-copy{min-width:0;flex:1}.billing-history strong,.billing-summary p{overflow-wrap:anywhere}

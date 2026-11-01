@@ -449,8 +449,48 @@ function profile() {
     0: Math.ceil((new Date(new Date().getFullYear() + (new Date() > new Date(new Date().getFullYear(), 2, 21) ? 1 : 0), 2, 21) - new Date()) / 86400000)
   })}</div></div><p class="note">${tr("BIO’ni tahrirlash uchun Telegram Business ruxsati kerak. Tadbir va tug‘ilgan kun bot ichida tanlanadi.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botda sozlash")}</a></section></div>`;
 }
+let billingData = null, billingError = '', billingPending = false, billingOwner = null, billingRequest = 0, billingMonths = 1;
+const demoCatalog = [1, 3, 6, 12].map(months => ({months, discount: {1:0,3:10,6:15,12:20}[months], prices: Object.fromEntries(Object.entries({plus:15,pro:35,ultra:70}).map(([key, price]) => [key, Math.floor((price * months * (100 - {1:0,3:10,6:15,12:20}[months]) + 50) / 100)]))}));
+function billingView() {
+  return mode === 'demo' ? {plan:state.plan, effective_plan:state.plan, expires_at:null, catalog:demoCatalog, history:[]} : billingOwner === state ? billingData : null;
+}
+async function refreshBilling() {
+  if (mode !== 'live') return;
+  const owner = state, request = ++billingRequest;
+  if (billingOwner !== owner) billingData = null;
+  billingOwner = owner; billingPending = true; billingError = '';
+  if (page === 'plans') render();
+  try {
+    const data = await api('/api/billing');
+    if (request !== billingRequest || mode !== 'live' || state !== owner) return;
+    billingData = data;
+    state.plan = data.effective_plan;
+  } catch (error) {
+    if (request !== billingRequest || mode !== 'live' || state !== owner) return;
+    billingError = error.message;
+  } finally {
+    if (request === billingRequest) {
+      billingPending = false;
+      if (mode === 'live' && state === owner && page === 'plans') render();
+    }
+  }
+}
+function billingDate(value) {
+  if (value == null) return '—';
+  const date = new Date(Number(value) * 1000);
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString(getLocale(), {year:'numeric',month:'short',day:'numeric'}) : '—';
+}
+function paymentStatus(value) {
+  return tr({pending:'Kutilmoqda',paid:'To‘langan',refunding:'Qaytarish jarayonida',refunded:'Qaytarilgan',expired:'Muddati tugagan',switched:'Tarif almashtirilgan',unmatched:'Tekshirilmoqda',cancelled:'Bekor qilingan'}[value] || 'Tekshirilmoqda');
+}
+function paymentHistory() {
+  const data = billingView();
+  modal(`${modalHead(tr("Xaridlar tarixi"))}<p class="hint">${tr("Oxirgi 20 ta buyurtma. Bekor qilingan buyurtmalar ko‘rsatilmaydi.")}</p><div class="billing-history">${data?.history?.length ? data.history.map(row => `<article class="feature-row"><div class="feature-copy"><strong>${e(String(row.plan || '').toUpperCase())} · ${num(row.stars)} XTR</strong><p>${e(billingDate(row.created_at))} · ${e(tr("{0} oy", {0:row.months}))}</p></div><span class="badge gray">${e(paymentStatus(row.status))}</span></article>`).join('') : `<p class="empty">${tr("Hali xaridlar yo‘q.")}</p>`}</div><p class="note">${tr("To‘lov yordami va qaytarish masalalari: botda /paysupport.")}</p>`);
+}
 function plans() {
-  return head(tr("Sizga mos tarif"), tr("Kichik qadamdan katta imkoniyatlargacha.")) + `<div class="plans-grid">${[['free', 'Free', '0', [tr("Oddiy avtojavob va uyqu rejimi"), tr("1 ta haftalik jadval"), tr("Bugungi statistika"), tr("Standart ism soati")]], ['plus', 'Plus', '2 000', [tr("15 ta Smart FAQ"), tr("2 ta avtomatlashtirish qoidasi"), tr("3 ta haftalik jadval"), tr("Shaxsiy javob matnlari"), tr("7 kunlik statistika"), tr("Reklamasiz foydalanish")]], ['pro', 'Pro', '5 000', [tr("30 ta Smart FAQ"), tr("10 ta avtomatlashtirish qoidasi"), tr("10 ta haftalik jadval"), tr("30 kunlik statistika"), tr("BIO hisoblagich"), tr("Qo‘shimcha vaqt zonalari")]], ['ultra', 'Ultra', '10 000', [tr("65 ta Smart FAQ"), tr("30 ta avtomatlashtirish qoidasi"), tr("30 ta haftalik jadval"), tr("Kuniga 50 ta AI javob"), tr("55 ta bilimlar yozuvi"), tr("Barcha statistika grafiklari"), tr("Qo‘shimcha soat shriftlari")]]].map(([key, title, price, features]) => `<section class="card plan-card ${key === 'ultra' ? 'recommended' : ''}"><div class="card-head"><h2>${title}</h2>${state.plan === key ? `<span class="badge">${tr("Joriy tarif")}</span>` : ''}</div><div class="price">${price}<small> ${tr("so‘m")}</small></div><span class="subtitle">${tr("oyiga")}</span><ul>${features.map(f => `<li>${f}</li>`).join('')}</ul><a class="button ${key === 'ultra' ? 'primary' : ''}" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botda ko‘rish ↗")}</a></section>`).join('')}</div><p class="note" style="margin-top:22px">${tr("Tarif bot ichida to‘lov tasdig‘ini administratorga yuborish orqali faollashtiriladi. Yakuniy narx va amaldagi tarifni botdan tekshiring.")}</p>`;
+  const data = billingView(), catalog = data?.catalog || [], selected = catalog.find(item => item.months === billingMonths) || catalog[0];
+  const controls = `<section class="card billing-summary"><div class="card-head"><h2>${tr("Obuna va to‘lovlar")}</h2><div class="button-group">${button(tr("Yangilash"), 'billing-refresh', 'reply', 'small')}${button(tr("Xaridlar tarixi"), 'billing-history', 'clock', 'small')}</div></div>${billingError && mode === 'live' ? `<p role="alert" class="note">${e(billingError)}</p>` : ''}${mode === 'live' && !data && !billingError ? `<p role="status">${tr("To‘lov ma’lumotlari yuklanmoqda…")}</p>` : data ? `<p>${tr("Joriy tarif")}: <strong>${e(String(data.plan).toUpperCase())}</strong> · ${data.plan === 'free' ? tr("Bepul") : data.expires_at == null ? tr("Muddatsiz") : e(tr("Amal qilish muddati: {0}", {0:billingDate(data.expires_at)}))}</p>${data.effective_plan !== data.plan ? `<p class="hint">${tr("Amaldagi ruxsatlar")}: ${e(String(data.effective_plan).toUpperCase())}</p>` : ''}` : ''}<div class="button-group billing-durations" role="group" aria-label="${tr("Obuna muddati")}">${catalog.map(item => `<button type="button" class="button small ${item.months === billingMonths ? 'primary' : ''}" data-action="billing-duration" data-months="${item.months}" aria-pressed="${item.months === billingMonths}">${tr("{0} oy", {0:item.months})}${item.discount ? ` · −${item.discount}%` : ''}</button>`).join('')}</div><p class="hint">${tr("Bir martalik to‘lov. Avtomatik yechib olish yo‘q. Yakuniy summa va tarif almashinuvi botda tasdiqlanadi.")}</p></section>`;
+  return head(tr("Sizga mos tarif"), tr("Kichik qadamdan katta imkoniyatlargacha.")) + controls + `<div class="plans-grid">${[['free', 'Free', [tr("Oddiy avtojavob va uyqu rejimi"), tr("1 ta haftalik jadval"), tr("Bugungi statistika"), tr("Standart ism soati")]], ['plus', 'Plus', [tr("15 ta Smart FAQ"), tr("2 ta avtomatlashtirish qoidasi"), tr("3 ta haftalik jadval"), tr("Shaxsiy javob matnlari"), tr("7 kunlik statistika"), tr("Reklamasiz foydalanish")]], ['pro', 'Pro', [tr("30 ta Smart FAQ"), tr("10 ta avtomatlashtirish qoidasi"), tr("10 ta haftalik jadval"), tr("30 kunlik statistika"), tr("BIO hisoblagich"), tr("Qo‘shimcha vaqt zonalari")]], ['ultra', 'Ultra', [tr("65 ta Smart FAQ"), tr("30 ta avtomatlashtirish qoidasi"), tr("30 ta haftalik jadval"), tr("Kuniga 50 ta AI javob"), tr("55 ta bilimlar yozuvi"), tr("Barcha statistika grafiklari"), tr("Qo‘shimcha soat shriftlari")]]].map(([key, title, features]) => `<section class="card plan-card ${key === 'ultra' ? 'recommended' : ''}"><div class="card-head"><h2>${title}</h2>${state.plan === key ? `<span class="badge">${tr("Joriy tarif")}</span>` : ''}</div><div class="price">${key === 'free' ? '0' : selected ? num(selected.prices[key]) : '—'}<small> XTR</small></div><span class="subtitle">${tr("{0} oy", {0:billingMonths})}</span><ul>${features.map(f => `<li>${f}</li>`).join('')}</ul><a class="button ${key === 'ultra' ? 'primary' : ''}" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botda ko‘rish ↗")}</a></section>`).join('')}</div><p class="note" style="margin-top:22px">${tr("To‘lov Telegram Stars orqali botda amalga oshiriladi. Bot → Tariflar bo‘limida tarif va muddatni tanlang. Faqat tasdiqlangan to‘lovdan keyin obuna faollashadi.")}</p>`;
 }
 function settings() {
   return head(tr("Sozlamalar"), tr("Hisobingiz va Web App ulanishini boshqaring.")) + `<div class="form-grid"><div class="form-stack"><section class="card"><h2>Telegram Business</h2>${featureRow('shield', tr("Hisob holati"), mode === 'live' ? state.connection?.is_enabled ? tr("Telegram Business ulangan") : tr("Business hisobini botga ulang") : tr("Hozir namoyish hisobi ochilgan"), `<span class="badge ${mode === 'live' ? '' : 'gray'}">${mode === 'live' ? tr("Haqiqiy hisob") : tr("Demo")}</span>`)}<p class="hint">${tr("Telegram → Sozlamalar → Telegram Business → Chatbotlar → @autoreplyer_dbot. Xabarlarga javob berish ruxsatini bering.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botni ochish")}</a></section><form class="card" id="connection-form"><h2>${tr("Web App ulanishi")}</h2><label class="field"><span>${tr("API server manzili")}</span><input type="url" name="api" value="${e(apiBase)}" placeholder="https://api.example.com"><small>${tr("Alohida API serveringiz manzili. Web App va API bir serverda bo‘lsa, bo‘sh qoldiring. Bot tokenini bu yerga kiritmang.")}</small></label><p class="note">${tr("Haqiqiy hisobga kirish uchun ilovani Telegram bot menyusidan oching. Telegram tasdiqlagan ma’lumot serverda tekshiriladi.")}</p><div class="save-row"><button class="button primary" type="submit">${icon('shield')}${tr("Ulanishni tekshirish")}</button></div></form></div><div class="form-stack"><section class="card"><h2>${tr("Ko‘rinish")}</h2>${featureRow('moon', tr("Tungi rang mavzusi"), tr("Qurilmada saqlanadi."), button(tr("Almashtirish"), 'theme', 'moon', 'small'))}${featureRow('globe', tr("Interfeys tili"), tr("Tanlov shu qurilmada saqlanadi."), languageSelector("settings-language"))}</section><section class="card"><h2>${tr("Ma’lumotlar")}</h2><p class="hint">${mode === 'demo' ? tr("Demo sozlamalari faqat shu brauzerda saqlanadi. Ular haqiqiy botingizga ta’sir qilmaydi.") : tr("Sozlamalar Telegram hisobingiz bilan bog‘langan umumiy bot bazasiga saqlanadi.")}</p>${mode === 'demo' ? button(tr("Demo ma’lumotlarini tiklash"), 'reset-demo', 'reply') : `<span class="badge">${tr("Telegram orqali tasdiqlangan")}</span>`}</section></div></div>`;
@@ -518,6 +558,13 @@ function render() {
   const search = document.querySelector('#entry-search');
   if (search && searchValue) { search.value = searchValue; filterEntries(searchValue); }
   restorePendingChanges();
+  if (page === 'plans') {
+    const refresh = document.querySelector('[data-action=billing-refresh]');
+    if (refresh) { refresh.disabled = billingPending || mode !== 'live'; refresh.setAttribute('aria-busy', String(billingPending)); }
+    const history = document.querySelector('[data-action=billing-history]');
+    if (history) history.disabled = !billingView();
+    if (mode === 'live' && billingOwner !== state) queueMicrotask(refreshBilling);
+  }
   paintIcons();
   animatePage(document.querySelector('#main'), `${page}:${getLanguage()}`);
 }
@@ -580,6 +627,20 @@ document.addEventListener('click', async event => {
   const action = el.dataset.action;
   let busy = false;
   try {
+    if (action === 'billing-duration') {
+      const months = Number(el.dataset.months);
+      if ([1,3,6,12].includes(months)) { billingMonths = months; render(); document.querySelector(`[data-action=billing-duration][data-months="${months}"]`)?.focus({preventScroll:true}); }
+      return;
+    }
+    if (action === 'billing-refresh') {
+      if (billingPending) return;
+      await refreshBilling(); return;
+    }
+    if (action === 'billing-history') {
+      if (billingView()) paymentHistory();
+      else toast(tr("Avval to‘lov ma’lumotlarini yangilang."));
+      return;
+    }
     if (action === 'back') {
       appNavigation.back();
       return;

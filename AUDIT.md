@@ -449,3 +449,35 @@ on this date:18 resolved runtime packages, no known vulnerabilities reported.
 CI/Render results for the published commit are recorded separately in local
 continuity notes. No authenticated production DB writes or real Telegram delivery
 were performed; these checks cannot establish the absence of every possible bug.
+
+
+## Stars billing sync — 2026-11-01
+
+Reviewed upstream 94e23b19→b1358fad (43 commits): payments.py, db.py,
+bot.py, i18n.py, payment tests and documentation. The Web App uses the exact
+new pin; six-module source hashes now include the payments module imported by db.
+The original bot repository is unchanged. Checkout remains in the bot by explicit
+user choice; the Web App adds no invoice, activation, switch or refund write route.
+
+GET /api/billing verifies the same signed owner, block/channel and rate checks.
+Owner ID/limit query arguments cannot select another buyer. Reads use upstream
+owner-scoped helpers, limit 20, and a response allowlist excluding tokens, charge
+IDs, owner IDs, snapshots, accounting and audit fields. API no-store remains.
+Missing tables/columns return localized 503; other sections retain their bootstrap.
+Actual purchased plan/expiry and effective admin access are displayed separately.
+UI failures never fall back to demo prices. Async reads are guarded by request and
+account identity, and billing responses do not replace another route. No billing
+data is persisted to localStorage. History content is escaped; dialogs reuse
+existing glass, motion, keyboard dismissal and reduced-preference behavior.
+
+Local validation: 73 API/auth/security/source/deployment tests; 16 real isolated
+PostgreSQL18.6 tests on b1358fad including billing owner scope/catalog/no activation;
+436-message UZ/RU/EN catalog and JS/API trust tests; all 10 existing browser suites
+plus the new billing suite (3 locales × 4 widths × 2 themes, retries, held read,
+XSS, GET-only, glass/reduced motion). The first temporary SQL cluster used SQL_ASCII;
+UTF-8 test DB rerun passed all16. Test-only browser selector/indentation mistakes
+were corrected and the billing suite rerun passed. Runtime requirements unchanged.
+Dependency audit refreshed with pip-audit2.10.1: no known vulnerabilities in resolved
+runtime packages on this date. This does not guarantee absence of vulnerabilities.
+No production authenticated account/DB writes, payment, refund or delivery test.
+Existing process-local limiter/cache and best-effort production limits remain.

@@ -87,6 +87,31 @@ class UpstreamIntegrationTests(unittest.TestCase):
         headers = {'X-Telegram-Init-Data': signed(auth_date=str(int(time.time())), user=json.dumps({'id': uid, 'first_name': 'Integration'}))}
         return self.client.request(method, path, headers=headers, **kwargs)
 
+    def test_billing_real_owner_history_catalog_and_no_writes(self):
+        import payments
+        from calendar import monthrange
+        def add_months(ts, n):
+            dt = datetime.fromtimestamp(ts)
+            y, m = divmod(dt.year * 12 + dt.month - 1 + n, 12)
+            return dt.replace(year=y, month=m+1, day=min(dt.day, monthrange(y,m+1)[1])).timestamp()
+        buyer, other = self.owner('free'), self.owner('free')
+        now = time.time()
+        for uid in (buyer, other):
+            state = self.db.get_user_plan_state(uid)
+            quote = payments.quote(state, 'pro', 3, now, add_months)
+            self.db.create_payment_order(uid, 'billing-' + str(uid), quote, state, 900, now)
+        response = self.request('GET', '/api/billing?user_id=' + str(other), uid=buyer)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['plan'], 'free')
+        self.assertEqual(len(data['history']), 1)
+        self.assertEqual(data['history'][0]['stars'], 95)
+        self.assertEqual(data['catalog'][3]['prices'], {'plus':144,'pro':336,'ultra':672})
+        self.assertNotIn('token', data['history'][0])
+        self.assertNotIn('charge_id', data['history'][0])
+        self.assertEqual(self.db.get_payment('billing-' + str(buyer))['status'], 'pending')
+        self.assertEqual(self.db.get_user_plan_state(buyer).plan, 'free')
+
     def test_bootstrap_uses_real_connection_settings_language_and_owner(self):
         other = self.owner('ultra')
         self.db.upsert_connection(self.uid, 'test-business', True, True)
