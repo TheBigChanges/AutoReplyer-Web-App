@@ -1,5 +1,50 @@
 // Source text, Russian, English. User-authored replies and knowledge are never translated.
 const rows = `
+O‘chirilgan|Выключено|Off
+Yoqish|Включить|Enable
+Smart Inbox: 3 ta suhbat, xulosa 20:00|Smart Inbox: 3 чата, сводка в 20:00|Smart Inbox: 3 chats, digest at 20:00
+Smart Inbox: 20 ta suhbat, xulosa vaqti tanlanadi|Smart Inbox: 20 чатов, выбор времени сводки|Smart Inbox: 20 chats, choose digest time
+Smart Inbox: 20 ta suhbat, 5 ta muhim, kuniga 3 ta eslatma|Smart Inbox: 20 чатов, 5 важных, 3 напоминания в день|Smart Inbox: 20 chats, 5 important, 3 reminders per day
+Smart Inbox: 20 ta suhbat, 20 ta muhim, kuniga 10 ta eslatma|Smart Inbox: 20 чатов, 20 важных, 10 напоминаний в день|Smart Inbox: 20 chats, 20 important, 10 reminders per day
+Smart Inbox|Smart Inbox|Smart Inbox
+Javobsiz suhbatlarni ko‘zdan qochirmang.|Не упускайте чаты без ответа.|Keep track of unanswered chats.
+Smart Inbox yuklanmoqda…|Загрузка Smart Inbox…|Loading Smart Inbox…
+Kuzatuv va kunlik xulosa|Отслеживание и ежедневная сводка|Tracking and daily digest
+Kuzatuv yoqilgan|Отслеживание включено|Tracking enabled
+Standart holatda o‘chiq|По умолчанию выключено|Off by default
+Suhbat siz shaxsan javob berguningizcha javobsiz hisoblanadi. Bot javoblari uni yopmaydi.|Чат остаётся без ответа, пока вы не ответите лично. Ответы бота не закрывают его.|A chat stays unanswered until you reply personally. Bot replies do not close it.
+Kunlik xulosa|Ежедневная сводка|Daily digest
+Xulosa vaqti|Время сводки|Digest time
+Free: 20:00. Vaqt tanlash Plus va undan yuqori tariflarda.|Free: 20:00. Выбор времени — на Plus и выше.|Free: 20:00. Time selection requires Plus or higher.
+Xabar matni va media saqlanmaydi. Faqat suhbat nomi, ID, hisoblagich va vaqtlar saqlanadi. 14 kundan eski holatlar tozalanadi.|Тексты и медиа не сохраняются. Хранятся только имя, ID чата, счётчик и время. Данные старше 14 дней удаляются.|Message text and media are not stored. Only chat name, ID, counters and times are kept. Data older than 14 days is removed.
+Eslatmalar|Напоминания|Reminders
+Pro: kuniga 3 ta, Ultra: 10 ta. Eslatma faqat bot bilan shaxsiy chatingizga yuboriladi.|Pro: 3 в день, Ultra: 10. Напоминания отправляются только в ваш личный чат с ботом.|Pro: 3 per day, Ultra: 10. Reminders are sent only to your private chat with the bot.
+Bugun: {0} / {1}|Сегодня: {0} / {1}|Today: {0} / {1}
+Suhbat|Чат|Chat
+Faol eslatmalar yo‘q.|Нет активных напоминаний.|No active reminders.
+Siz javob bersangiz eslatma bekor qilinadi. Keyingi vaqt zonasi o‘zgarishi saqlangan vaqtni siljitmaydi.|Когда вы ответите, напоминание отменится. Смена часового пояса не сдвигает сохранённое время.|Your reply cancels the reminder. Later timezone changes do not move the saved time.
+Javobsiz suhbatlar|Чаты без ответа|Unanswered chats
+Eng uzoq kutish: {0}|Самое долгое ожидание: {0}|Longest wait: {0}
+Muhim: {0} / {1}|Важные: {0} / {1}|Important: {0} / {1}
+{0} ta xabar|Сообщений: {0}|{0} messages
+Belgini olib tashlash|Убрать отметку|Remove mark
+Muhim deb belgilash|Отметить важным|Mark important
+Eslatish|Напомнить|Remind me
+Javobsiz suhbatlar yo‘q|Нет чатов без ответа|No unanswered chats
+Kuzatuvni yoqing|Включите отслеживание|Enable tracking
+Faqat yoqilgandan keyin bot ko‘rgan suhbatlar hisoblanadi.|Учитываются только чаты, которые бот увидел после включения.|Only chats seen by the bot after enabling are counted.
+Tarif bo‘yicha {0} ta suhbat ko‘rsatiladi. Jami: {1}.|По тарифу показано чатов: {0}. Всего: {1}.|Your plan shows {0} chats. Total: {1}.
+Muhim suhbatlar Pro’da 5 ta, Ultra’da 20 ta. Muhimlar avval ko‘rsatiladi.|Важные чаты: Pro — 5, Ultra — 20. Они отображаются первыми.|Important chats: Pro — 5, Ultra — 20. They appear first.
+Smart Inbox’ni o‘chirish?|Выключить Smart Inbox?|Disable Smart Inbox?
+Kuzatilgan suhbatlar, muhim belgilar va barcha eslatmalar o‘chiriladi. Bu amalni ortga qaytarib bo‘lmaydi.|Отслеживаемые чаты, важные отметки и все напоминания будут удалены. Это действие нельзя отменить.|Tracked chats, important marks and all reminders will be deleted. This cannot be undone.
+Mavjud eslatma yangi vaqt bilan almashtiriladi.|Существующее напоминание будет заменено новым временем.|The existing reminder will be replaced with the new time.
+1 soatdan keyin|Через 1 час|In 1 hour
+3 soatdan keyin|Через 3 часа|In 3 hours
+6 soatdan keyin|Через 6 часов|In 6 hours
+Ertaga 09:00|Завтра в 09:00|Tomorrow at 09:00
+Bir soatdan kam|Менее часа|Less than an hour
+{0} soat|{0} ч.|{0} hours
+Namoyish rejimi: haqiqiy botga ta’sir qilmaydi.|Демо: не влияет на настоящего бота.|Demo: does not affect the real bot.
 Yangilash|Обновить|Refresh
 Bepul|Бесплатно|Free
 Obuna va to‘lovlar|Подписка и платежи|Subscription and payments

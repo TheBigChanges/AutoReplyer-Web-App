@@ -5,7 +5,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 BASE = os.environ.get('AR_BASE_URL', 'http://127.0.0.1:8765')
-ROUTES = ['dashboard', 'replies', 'ai', 'faq', 'knowledge', 'scheduler', 'analytics', 'sleep', 'profile', 'plans', 'settings', 'help']
+ROUTES = ['dashboard', 'replies', 'ai', 'faq', 'knowledge', 'inbox', 'scheduler', 'analytics', 'sleep', 'profile', 'plans', 'settings', 'help']
 STUB = '''window.chromeColors={};window.Telegram={WebApp:{initData:"",ready(){},expand(){},
 setHeaderColor(c){window.chromeColors.header=c},setBackgroundColor(c){window.chromeColors.background=c}}};'''
 Path('artifacts').mkdir(exist_ok=True)

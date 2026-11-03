@@ -481,3 +481,49 @@ Dependency audit refreshed with pip-audit2.10.1: no known vulnerabilities in res
 runtime packages on this date. This does not guarantee absence of vulnerabilities.
 No production authenticated account/DB writes, payment, refund or delivery test.
 Existing process-local limiter/cache and best-effort production limits remain.
+
+
+## Smart Inbox sync — 2026-11-03
+
+Reviewed upstream b1358fad→8c879681 (55commits): all changed production hunks in
+bot.py/db.py, new pure inbox.py, translations/docs and relevant Inbox/payment/AI
+regression contracts. Inbox tracking/digest/reminder jobs and bot-side fixes for
+unknown send outcomes, duplicate AI/FAQ updates, checkout claims and recovery
+stay in the original bot process. The original repository is unchanged; Docker
+pins the exact reviewed commit. Seven source fingerprints include inbox.py.
+
+New owner-authenticated Inbox endpoints accept strict explicit settings, priority
+state and a bounded reminder choice. Caller-supplied owner IDs, due instants,
+limits, digest claim state and unknown keys cannot modify server decisions.
+Disabling requires confirm_clear=true; upstream atomically removes only the
+owner's tracked chats/reminders. Priority/reminder quotas use upstream locked
+transactions. Cross-owner writes return no-chat/conflict. Removal/cancellation
+remain available after downgrade. Reminder due instants/date/limits are derived
+on the server, following upstream timezone eligibility. Tomorrow09:00 and stable
+saved due times after timezone change were verified in real SQL.
+
+Response allowlists expose owner chat names/IDs/counters/times needed for the
+interface, excluding message text/media and internal claim/attempt fields.
+API no-store and signed authentication/block/channel/rate controls are retained.
+No Inbox data is added to bootstrap or browser storage. Missing schema gives a
+localized503; the adapter never migrates or runs jobs. UI writes serialize; pending
+controls survive locale rerenders and late responses cannot replace another route
+or account. Destructive confirmation, escaped names, tier locks, keyboard dialogs,
+shared blur/motion and reduced preferences are covered by browser tests.
+
+Validation:79 API/auth/security/source/deploy tests;19 isolated real PostgreSQL18.6
+contracts (all plans, concurrency, retention, reply cancellation and owner deletion);
+481-message UZ/RU/EN catalog and JS/API trust checks; all12 browser suites. New
+Inbox suite covers3locales×4widths×2themes, schema retry, XSS, held writes across
+language/navigation, explicit consent, Free locks, enlarged text, glass/reduced
+motion. Existing design and locale matrices now include Inbox. Initial locale
+route/heading alignment and an empty catalog row were fixed; passing final checks
+supersede those test failures. Visually reviewed light/dark mobile Inbox and the
+destructive dialog. Dependency audit2.10.1 found no known runtime vulnerabilities
+on2026-11-03; runtime requirements unchanged. This is not an absence guarantee.
+
+Counts span multiple reads and may transiently differ during bot updates. Live
+Telegram delivery, authenticated production DB writes and financial transactions
+were not exercised. Existing process-local rate/membership caches and documented
+production/soak limitations remain. No new claims of exhaustive bot review or
+production delivery certification are made.

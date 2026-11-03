@@ -70,7 +70,7 @@ class UpstreamPreparationTests(unittest.TestCase):
 
     def test_missing_bot_module_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'missing required'):
-            self.prepare('a'*40, missing='payments.py')
+            self.prepare('a'*40, missing='inbox.py')
         self.assertFalse(self.output.exists())
 
     def test_unpinned_ref_is_rejected_before_network_access(self):

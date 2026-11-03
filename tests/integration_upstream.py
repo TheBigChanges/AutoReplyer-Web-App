@@ -87,6 +87,63 @@ class UpstreamIntegrationTests(unittest.TestCase):
         headers = {'X-Telegram-Init-Data': signed(auth_date=str(int(time.time())), user=json.dumps({'id': uid, 'first_name': 'Integration'}))}
         return self.client.request(method, path, headers=headers, **kwargs)
 
+    def test_inbox_real_owner_scope_settings_retention_and_disable(self):
+        other = self.owner('pro')
+        for uid in (self.uid, other):
+            self.db.set_inbox_settings(uid, enabled=True)
+            self.db.record_customer_message(uid, 72, 1, '<script>name</script>')
+        r = self.request('GET','/api/inbox?owner=' + str(other)).json()
+        self.assertEqual(r['total'],1); self.assertEqual(r['chats'][0]['chat_id'],72)
+        self.assertNotIn('owner_user_id', r['chats'][0])
+        self.assertEqual(self.request('PATCH','/api/inbox/settings',json={'enabled':False}).status_code,422)
+        self.assertEqual(self.request('PATCH','/api/inbox/settings',json={'enabled':False,'confirm_clear':True}).status_code,200)
+        self.assertIsNone(self.db.get_inbox_chat(self.uid,72)); self.assertIsNotNone(self.db.get_inbox_chat(other,72))
+        self.assertEqual(self.request('GET','/api/inbox').json()['total'],0)
+        self.assertFalse(self.db.record_customer_message(self.uid,72,2,'Off'))
+        self.db.set_inbox_settings(self.uid,enabled=True)
+        self.db.record_customer_message(self.uid,73,1,'Old',time.time()-15*86400)
+        self.assertEqual(self.request('GET','/api/inbox').json()['total'],0)
+
+    def test_inbox_all_plan_limits_and_timezone(self):
+        for current, count, priority, reminders in [('free',3,0,0),('plus',20,0,0),('pro',20,5,3),('ultra',20,20,10)]:
+            uid = self.owner(current); self.db.set_inbox_settings(uid,enabled=True,digest_minutes=600)
+            self.db.update_settings(uid,name_clock_tz='America/New_York')
+            for cid in range(1,23): self.db.record_customer_message(uid,cid,1,'Chat')
+            d = self.request('GET','/api/inbox',uid=uid).json()
+            self.assertEqual((d['total'],len(d['chats']),d['limits']['priority'],d['limits']['reminders']),(22,count,priority,reminders))
+            self.assertEqual(d['timezone'],'America/New_York' if priority else 'Asia/Tashkent')
+            self.assertEqual(d['digest_minutes'],1200 if current=='free' else 600)
+            self.assertEqual(self.request('POST','/api/inbox/chats/1/priority',uid=uid,json={'is_priority':True}).status_code,200 if priority else 403)
+            self.assertEqual(self.request('POST','/api/inbox/chats/1/reminder',uid=uid,json={'choice':'1h'}).status_code,200 if reminders else 403)
+            if reminders:
+                from zoneinfo import ZoneInfo
+                result=self.request('POST','/api/inbox/chats/1/reminder',uid=uid,json={'choice':'next9'}).json()
+                due=result['due_at']; local=datetime.fromtimestamp(due,ZoneInfo('America/New_York'))
+                self.assertEqual((local.hour,local.minute),(9,0))
+                self.assertEqual(local.date(),datetime.now(ZoneInfo('America/New_York')).date()+timedelta(days=1))
+                self.db.update_settings(uid,name_clock_tz='UTC')
+                self.assertEqual(self.db.list_inbox_reminders(uid)[0]['due_at'],due)
+
+
+    def test_inbox_atomic_priority_and_reminder_limits_owner_reply(self):
+        self.db.set_user_plan(self.uid,'pro');self.db.set_inbox_settings(self.uid,enabled=True)
+        for cid in range(1,8): self.db.record_customer_message(self.uid,cid,1,'Chat')
+        with ThreadPoolExecutor(max_workers=7) as pool:
+            results=list(pool.map(lambda cid:self.request('POST',f'/api/inbox/chats/{cid}/priority',json={'is_priority':True}).status_code,range(1,8)))
+        self.assertEqual(results.count(200),5);self.assertEqual(self.db.count_priority_chats(self.uid),5)
+        with ThreadPoolExecutor(max_workers=7) as pool:
+            results=list(pool.map(lambda cid:self.request('POST',f'/api/inbox/chats/{cid}/reminder',json={'choice':'1h'}).status_code,range(1,8)))
+        self.assertEqual(results.count(200),3);self.assertEqual(len(self.db.list_inbox_reminders(self.uid)),3)
+        rem=self.db.list_inbox_reminders(self.uid)[0]
+        self.db.record_owner_reply(self.uid,rem['chat_id'],2)
+        self.assertFalse(any(r['chat_id']==rem['chat_id'] for r in self.db.list_inbox_reminders(self.uid)))
+        self.assertEqual(self.request('POST',f"/api/inbox/chats/{rem['chat_id']}/reminder",json={'choice':'1h'}).status_code,404)
+        other=self.owner('pro');self.db.set_inbox_settings(other,enabled=True)
+        self.assertEqual(self.request('POST','/api/inbox/chats/1/priority',uid=other,json={'is_priority':True}).status_code,404)
+        self.assertEqual(self.request('DELETE','/api/inbox/chats/1/reminder',uid=other).status_code,409)
+        self.assertEqual(self.request('PATCH','/api/inbox/settings',json={'enabled':False,'confirm_clear':True}).status_code,200)
+        self.assertEqual(self.db.list_inbox_reminders(self.uid),[])
+
     def test_billing_real_owner_history_catalog_and_no_writes(self):
         import payments
         from calendar import monthrange

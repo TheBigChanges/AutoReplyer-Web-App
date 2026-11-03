@@ -69,7 +69,7 @@ def modules():
     with _module_lock:
         if _modules is None:
             root = Path(os.environ.get('AUTOREPLYER_SOURCE', '')).resolve()
-            if not os.environ.get('AUTOREPLYER_SOURCE') or not all((root / f).is_file() for f in ['db.py', 'logic.py', 'i18n.py', 'analytics.py', 'automation.py', 'payments.py']):
+            if not os.environ.get('AUTOREPLYER_SOURCE') or not all((root / f).is_file() for f in ['db.py', 'logic.py', 'i18n.py', 'analytics.py', 'automation.py', 'payments.py', 'inbox.py']):
                 raise HTTPException(503, 'AUTOREPLYER_SOURCE yangi AutoReplyer kodi papkasiga ko‘rsatilishi kerak.')
             sys.path.insert(0, str(root))
             _modules = tuple(importlib.import_module(name) for name in ['db', 'logic', 'analytics'])
@@ -331,6 +331,125 @@ def billing(user: User):
                          'prices': {key: pricing.stars_price(key, months) for key in ('plus', 'pro', 'ultra')}}
                         for months in pricing.DURATIONS],
             'history': [{key: row.get(key) for key in fields} for row in history]}
+
+
+class InboxSettings(Input):
+    enabled: StrictBool | None = None
+    notify: StrictBool | None = None
+    digest_minutes: int | None = Field(None, strict=True)
+    confirm_clear: StrictBool = False
+
+    @model_validator(mode='after')
+    def valid_settings(self):
+        fields = self.model_fields_set - {'confirm_clear'}
+        if not fields or any(getattr(self, key) is None for key in fields):
+            raise ValueError('empty settings')
+        if self.digest_minutes is not None and self.digest_minutes not in range(480, 1321, 120):
+            raise ValueError('unsupported digest time')
+        if self.enabled is False and not self.confirm_clear:
+            raise ValueError('confirm deletion')
+        return self
+
+
+class InboxPriority(Input):
+    is_priority: StrictBool
+
+
+class InboxReminder(Input):
+    choice: Literal['1h', '3h', '6h', 'next9']
+
+
+ChatId = Annotated[int, PathParameter(ge=1, le=4503599627370495)]
+
+
+def inbox_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except (UndefinedTable, UndefinedColumn):
+        raise HTTPException(503, 'Smart Inbox bazasi hali tayyor emas. Botning yangi versiyasini ishga tushiring.') from None
+
+
+def inbox_context(uid):
+    db, _, _ = modules()
+    engine = importlib.import_module('inbox')
+    current = plan(uid)
+    zone = user_zone(db.get_settings(uid)) if current in ('pro', 'ultra') else ZoneInfo('Asia/Tashkent')
+    return db, engine, current, zone
+
+
+def inbox_result(value):
+    errors = {'disabled': (409, 'Avval Smart Inbox’ni yoqing.'),
+              'no_chat': (404, 'Suhbat topilmadi yoki allaqachon javob berilgan.'),
+              'forbidden': (403, 'Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.'),
+              'limit': (409, 'Smart Inbox tarif limiti to‘lgan.'),
+              'busy': (409, 'Eslatma yuborilmoqda. Bir oz kutib qayta urinib ko‘ring.')}
+    if value in errors:
+        raise HTTPException(*errors[value])
+    if value != 'ok':
+        raise HTTPException(503, 'AutoReplyer kodi versiyasi mos emas.')
+
+
+@app.get('/api/inbox')
+def inbox_view(user: User):
+    uid = user['id']
+    db, engine, current, zone = inbox_context(uid)
+    cfg = inbox_call(db.get_inbox_settings, uid)
+    now = time.time()
+    total, chats = inbox_call(db.get_pending_chats, uid, engine.INBOX_PLAN_LIMITS[current], now,
+                              priority_first=current in ('pro', 'ultra')) if cfg['enabled'] else (0, [])
+    stats = inbox_call(db.get_pending_stats, uid, now) if cfg['enabled'] else {'oldest_waiting_since': None, 'priority': 0}
+    reminders = inbox_call(db.list_inbox_reminders, uid) if cfg['enabled'] else []
+    return {'settings': {key: cfg[key] for key in ('enabled', 'notify', 'digest_minutes')},
+            'digest_minutes': engine.effective_minutes(cfg['digest_minutes'], current != 'free'),
+            'timezone': str(zone), 'total': total, 'oldest_waiting_since': stats['oldest_waiting_since'],
+            'priority_count': stats['priority'] if current in ('pro', 'ultra') else 0,
+            'limits': {'chats': engine.INBOX_PLAN_LIMITS[current], 'priority': engine.INBOX_PRIORITY_LIMITS[current],
+                       'reminders': engine.INBOX_REMINDER_DAILY_LIMITS[current], 'time': current != 'free'},
+            'reminders_today': inbox_call(db.count_inbox_reminders_for_date, uid, datetime.fromtimestamp(now, zone).date()),
+            'chats': [{key: row.get(key) for key in ('chat_id', 'customer_name', 'pending_count', 'waiting_since', 'is_priority')} for row in chats],
+            'reminders': [{key: row.get(key) for key in ('chat_id', 'customer_name', 'due_at')} for row in reminders]}
+
+
+@app.patch('/api/inbox/settings')
+def inbox_settings_update(body: InboxSettings, user: User):
+    uid = user['id']
+    db, _, current, _ = inbox_context(uid)
+    fields = body.model_dump(exclude_unset=True, exclude={'confirm_clear'})
+    if 'digest_minutes' in fields and current == 'free':
+        raise HTTPException(403, 'Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.')
+    inbox_call(db.set_inbox_settings, uid, **fields)
+    return {'ok': True}
+
+
+@app.post('/api/inbox/chats/{chat_id}/priority')
+def inbox_priority(chat_id: ChatId, body: InboxPriority, user: User):
+    db, engine, current, _ = inbox_context(user['id'])
+    if body.is_priority and current not in ('pro', 'ultra'):
+        raise HTTPException(403, 'Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.')
+    result = inbox_call(db.set_inbox_priority, user['id'], chat_id, body.is_priority, engine.INBOX_PRIORITY_LIMITS[current])
+    inbox_result(result)
+    return {'is_priority': body.is_priority}
+
+
+@app.post('/api/inbox/chats/{chat_id}/reminder')
+def inbox_reminder(chat_id: ChatId, body: InboxReminder, user: User):
+    db, engine, current, zone = inbox_context(user['id'])
+    if current not in ('pro', 'ultra'):
+        raise HTTPException(403, 'Bu imkoniyat uchun yuqoriroq tarif kerak. Tarifni botda yangilang.')
+    due_at, due_date = engine.reminder_due(body.choice, time.time(), zone)
+    result = inbox_call(db.schedule_inbox_reminder, user['id'], chat_id, due_at, due_date, engine.INBOX_REMINDER_DAILY_LIMITS[current])
+    if not isinstance(result, int):
+        inbox_result(result)
+    return {'due_at': due_at}
+
+
+@app.delete('/api/inbox/chats/{chat_id}/reminder')
+def inbox_cancel_reminder(chat_id: ChatId, user: User):
+    db, _, _ = modules()
+    # Owner-scoped cancellation stays available after a downgrade; sending cannot be undone.
+    if not inbox_call(db.cancel_inbox_reminder, user['id'], chat_id):
+        raise HTTPException(409, 'Eslatma topilmadi yoki yuborilmoqda. Ro‘yxatni yangilang.')
+    return {'ok': True}
 
 
 @app.patch('/api/settings')

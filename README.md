@@ -286,3 +286,50 @@ navigation, escaped history, duration prices, 3 locales × 4 widths × 2 themes,
 glass and reduced motion. `tests/test_billing.py` verifies owner scoping, sensitive
 field exclusion, unsigned/mutation rejection and missing schema. The real SQL suite
 also checks owner billing data against the exact Docker pin.
+
+
+## Smart Inbox — 2026-11-03
+
+The Web App pins upstream `8c87968140de23f702afda29dcbfdb8b23b02607`.
+Deploy the updated original bot first so its startup creates inbox tables and
+new payment fields. The adapter never runs schema migrations or bot jobs.
+Seven verified source modules include `inbox.py`. Upstream also fixes AI/FAQ
+repeat delivery and payment checkout/recovery; those handlers still run in the bot.
+The bot now defaults its legacy card display on; checkout method availability is
+controlled there. The Web App keeps Stars price/history display and bot checkout.
+
+Open **Smart Inbox** in the sidebar or **Settings → All sections** on mobile.
+Tracking is opt-in. Only chats seen after enabling are counted, and only a personal
+owner reply clears an unanswered chat; bot replies do not. No message text or media
+is stored. Chat names/IDs/counters/timestamps remain owner-scoped and expire after
+14 days. Disabling tracking requires an explicit destructive confirmation and
+atomically deletes tracked chats, priority marks and reminders for that owner.
+
+Free lists3 chats with a20:00 digest; Plus lists20 and chooses08:00–22:00 every2h.
+Pro/Ultra list20, allow5/20 priority chats and3/10 daily reminders. Priority is
+ordered first only for Pro/Ultra; marks survive a downgrade and can be removed.
+Reminder choices:1h/3h/6h/tomorrow09:00. Limits are checked for the due local date,
+including sent/unknown reminders; replacement is atomic and one active reminder
+per chat. Replying cancels unsent reminders; sending cannot be undone. Stored due
+instants do not shift after a timezone change. Pro/Ultra use the selected account
+zone with a safe fallback; Free/Plus use Tashkent, matching upstream.
+
+Owner-authenticated endpoints: GET `/api/inbox`, PATCH `/api/inbox/settings`,
+POST `/api/inbox/chats/{chat_id}/priority`, POST or DELETE
+`/api/inbox/chats/{chat_id}/reminder`. Writes accept strict explicit states and
+server-derived limits/times, never a caller owner ID. Missing inbox schema gives
+a localized503 on this page without adding inbox reads to bootstrap. No routes
+claim digests or mark reminders sent; only the existing bot jobs deliver them.
+
+Inbox data stays in memory for the current account and is not placed in browser
+storage. Pending controls remain disabled across localization/navigation; late
+reads/writes cannot replace another account or route. Refresh manually for current
+chat status. Names render as escaped text. Demo changes are illustrative and stay
+in memory. The existing premium theme, glass dialogs, shared motion, reduced
+preferences, keyboard controls and five mobile dock destinations are preserved.
+`browser_inbox.py` joins CI, and the SQL suite verifies owner boundaries, all plans,
+retention, concurrent last slots, reply cancellation and destructive disable.
+
+Counts are best-effort snapshots across several reads. Deleted customer messages
+may remain unanswered until a personal reply or retention, matching the bot.
+Delivery is handled by bot jobs and is not certified by the Web App tests.

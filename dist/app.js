@@ -50,7 +50,7 @@ const num = n => Number(n || 0).toLocaleString(getLocale());
 const time = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
 const minutes = s => s.split(':').reduce((h, m) => Number(h) * 60 + Number(m));
 let days = weekDays();
-const navigationKeys = [['dashboard', 'dashboard', 'Umumiy ko‘rinish'], ['replies', 'message', 'Avtojavob'], ['ai', 'sparkles', 'AI yordamchi', 'ULTRA'], ['faq', 'book', 'Smart FAQ'], ['automation', 'automation', 'Avtomatlashtirish'], ['knowledge', 'book', 'Bilimlar bazasi'], ['scheduler', 'calendar', 'Smart jadval'], ['analytics', 'chart', 'Statistika'], ['sleep', 'moon', 'Uyqu rejimi'], ['profile', 'clock', 'Profil vositalari'], ['settings', 'settings', 'Sozlamalar']];
+const navigationKeys = [['dashboard', 'dashboard', 'Umumiy ko‘rinish'], ['replies', 'message', 'Avtojavob'], ['ai', 'sparkles', 'AI yordamchi', 'ULTRA'], ['faq', 'book', 'Smart FAQ'], ['automation', 'automation', 'Avtomatlashtirish'], ['inbox', 'inbox', 'Smart Inbox'], ['knowledge', 'book', 'Bilimlar bazasi'], ['scheduler', 'calendar', 'Smart jadval'], ['analytics', 'chart', 'Statistika'], ['sleep', 'moon', 'Uyqu rejimi'], ['profile', 'clock', 'Profil vositalari'], ['settings', 'settings', 'Sozlamalar']];
 const tg = window.Telegram?.WebApp;
 let apiBase = storage.getItem('ar-api') || '';
 let mode = tg?.initData ? 'loading' : 'demo',
@@ -449,6 +449,85 @@ function profile() {
     0: Math.ceil((new Date(new Date().getFullYear() + (new Date() > new Date(new Date().getFullYear(), 2, 21) ? 1 : 0), 2, 21) - new Date()) / 86400000)
   })}</div></div><p class="note">${tr("BIO’ni tahrirlash uchun Telegram Business ruxsati kerak. Tadbir va tug‘ilgan kun bot ichida tanlanadi.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botda sozlash")}</a></section></div>`;
 }
+let inboxDialogOwner = null;
+let inboxData = null, inboxError = '', inboxOwner = null, inboxPending = false, inboxBusy = false, inboxRequest = 0;
+let demoInbox = null, demoInboxOwner = null;
+function inboxDemo() {
+  if (demoInboxOwner !== state) {
+    demoInboxOwner = state;
+    demoInbox = {settings:{enabled:false,notify:true,digest_minutes:1200},digest_minutes:1200,timezone:'Asia/Tashkent',total:0,oldest_waiting_since:null,priority_count:0,reminders_today:0,chats:[],reminders:[]};
+  }
+  const p = state.plan;
+  demoInbox.limits = {chats:p === 'free' ? 3 : 20,priority:{free:0,plus:0,pro:5,ultra:20}[p],reminders:{free:0,plus:0,pro:3,ultra:10}[p],time:p !== 'free'};
+  return demoInbox;
+}
+function inboxView() { return mode === 'demo' ? inboxDemo() : inboxOwner === state ? inboxData : null; }
+async function refreshInbox() {
+  if (mode !== 'live') return;
+  const owner = state, request = ++inboxRequest;
+  if (inboxOwner !== owner) inboxData = null;
+  inboxOwner = owner; inboxPending = true; inboxError = '';
+  if (page === 'inbox') render();
+  try {
+    const data = await api('/api/inbox');
+    if (request === inboxRequest && mode === 'live' && state === owner) inboxData = data;
+  } catch (error) {
+    if (request === inboxRequest && mode === 'live' && state === owner) inboxError = error.message;
+  } finally {
+    if (request === inboxRequest) {
+      inboxPending = false;
+      if (mode === 'live' && state === owner && page === 'inbox') render();
+    }
+  }
+}
+async function writeInbox(path, method, body) {
+  if (inboxBusy || inboxPending) return;
+  const owner = state, wasDemo = mode === 'demo';
+  inboxBusy = true;
+  if (page === 'inbox') render();
+  try {
+    if (!wasDemo) await api(path, method, body);
+    else {
+      const d = inboxDemo(), id = Number(path.split('/')[4]);
+      if (path.endsWith('/settings')) {
+        Object.assign(d.settings, body); d.digest_minutes = d.settings.digest_minutes;
+        if (body.enabled === false) { d.chats = []; d.reminders = []; d.total = 0; d.priority_count = 0; d.reminders_today = 0; }
+      } else if (path.endsWith('/priority')) {
+        const row = d.chats.find(c => c.chat_id === id); if (row) row.is_priority = body.is_priority;
+      } else if (path.endsWith('/reminder')) {
+        d.reminders = d.reminders.filter(c => c.chat_id !== id);
+        if (method !== 'DELETE') {
+          const now = Date.now()/1000;
+          const due = body.choice === 'next9' ? Math.floor((now+5*3600)/86400)*86400+86400+4*3600 : now+{'1h':3600,'3h':10800,'6h':21600}[body.choice];
+          d.reminders.push({chat_id:id,customer_name:d.chats.find(c => c.chat_id === id)?.customer_name,due_at:due});
+        }
+      }
+    }
+    if (state !== owner || (wasDemo ? mode !== 'demo' : mode !== 'live')) return;
+    if (!wasDemo) await refreshInbox();
+    toast(tr(wasDemo ? 'Namoyish rejimi: haqiqiy botga ta’sir qilmaydi.' : 'Saqlandi'));
+  } catch (error) { if (state === owner) toast(error.message); }
+  finally { inboxBusy = false; if (state === owner && page === 'inbox') render(); }
+}
+function inboxWait(value) {
+  if (value == null) return '—';
+  const hours = Math.max(0, Math.floor((Date.now()/1000-Number(value))/3600));
+  return hours < 1 ? tr("Bir soatdan kam") : tr("{0} soat", {0:hours});
+}
+function inboxDate(value, zone) {
+  const date = new Date(Number(value)*1000);
+  if (!Number.isFinite(date.getTime())) return '—';
+  try { return date.toLocaleString(getLocale(), {dateStyle:'medium',timeStyle:'short',timeZone:zone}); }
+  catch { return date.toLocaleString(getLocale()); }
+}
+function inboxPage() {
+  const d = inboxView();
+  const heading = head(tr("Smart Inbox"), tr("Javobsiz suhbatlarni ko‘zdan qochirmang."), button(tr("Yangilash"), 'inbox-refresh', 'reply'));
+  if (!d) return heading + `<section class="card empty"><p role="${inboxError ? 'alert' : 'status'}">${inboxError ? e(inboxError) : tr("Smart Inbox yuklanmoqda…")}</p></section>`;
+  const cfg = d.settings, locked = !d.limits.reminders;
+  return heading + `<div class="form-grid inbox-layout"><div class="form-stack"><section class="card"><h2>${tr("Kuzatuv va kunlik xulosa")}</h2>${featureRow('inbox', tr("Smart Inbox"), cfg.enabled ? tr("Kuzatuv yoqilgan") : tr("Standart holatda o‘chiq"), button(cfg.enabled ? tr("O‘chirish") : tr("Yoqish"), cfg.enabled ? 'inbox-disable' : 'inbox-enable', cfg.enabled ? 'close' : 'check', 'small'))}<p class="hint">${tr("Suhbat siz shaxsan javob berguningizcha javobsiz hisoblanadi. Bot javoblari uni yopmaydi.")}</p>${featureRow('clock', tr("Kunlik xulosa"), time(d.digest_minutes) + ' · ' + e(d.timezone), `<button type="button" class="button small" data-action="inbox-notify" aria-pressed="${cfg.notify}">${cfg.notify ? tr("Yoqilgan") : tr("O‘chirilgan")}</button>`)}<label class="field"><span>${tr("Xulosa vaqti")}</span><select id="inbox-time" ${!d.limits.time ? 'disabled' : ''}>${[8,10,12,14,16,18,20,22].map(h => `<option value="${h*60}" ${d.digest_minutes === h*60 ? 'selected' : ''}>${time(h*60)}</option>`).join('')}</select><small>${tr("Free: 20:00. Vaqt tanlash Plus va undan yuqori tariflarda.")}</small></label><p class="note">${tr("Xabar matni va media saqlanmaydi. Faqat suhbat nomi, ID, hisoblagich va vaqtlar saqlanadi. 14 kundan eski holatlar tozalanadi.")}</p></section><section class="card"><h2>${tr("Eslatmalar")}</h2><p class="hint">${tr("Pro: kuniga 3 ta, Ultra: 10 ta. Eslatma faqat bot bilan shaxsiy chatingizga yuboriladi.")}</p><p>${tr("Bugun: {0} / {1}", {0:num(d.reminders_today),1:num(d.limits.reminders)})}</p>${d.reminders.map(r => `<article class="inbox-reminder"><div><strong>${e(r.customer_name || tr("Suhbat"))}</strong><small>${e(inboxDate(r.due_at,d.timezone))}</small></div><button type="button" class="button small" data-action="inbox-cancel" data-chat="${e(r.chat_id)}">${tr("Bekor qilish")}</button></article>`).join('') || `<p class="hint">${tr("Faol eslatmalar yo‘q.")}</p>`}<p class="hint">${tr("Siz javob bersangiz eslatma bekor qilinadi. Keyingi vaqt zonasi o‘zgarishi saqlangan vaqtni siljitmaydi.")}</p></section></div><section class="card inbox-list"><div class="card-head"><h2>${tr("Javobsiz suhbatlar")}</h2><span class="badge">${num(d.total)}</span></div>${inboxError ? `<p role="alert" class="note">${e(inboxError)}</p>` : ''}<p class="hint">${tr("Eng uzoq kutish: {0}", {0:inboxWait(d.oldest_waiting_since)})} · ${tr("Muhim: {0} / {1}", {0:num(d.priority_count),1:num(d.limits.priority)})}</p>${d.chats.map(c => `<article class="inbox-chat"><div class="inbox-chat-heading"><span class="feature-icon">${icon(c.is_priority && d.limits.priority ? 'sparkles' : 'message')}</span><div><strong>${e(c.customer_name || tr("Suhbat"))}</strong><small>${tr("{0} ta xabar",{0:num(c.pending_count)})} · ${e(inboxWait(c.waiting_since))}</small></div></div><div class="button-group"><button type="button" class="button small" data-action="inbox-priority" data-chat="${e(c.chat_id)}" data-priority="${!c.is_priority}" aria-pressed="${!!c.is_priority}" ${!d.limits.priority && !c.is_priority ? 'disabled' : ''}>${icon('sparkles')}${c.is_priority ? tr("Belgini olib tashlash") : tr("Muhim deb belgilash")}</button><button type="button" class="button small" data-action="inbox-remind" data-chat="${e(c.chat_id)}" ${locked ? 'disabled' : ''}>${icon('clock')}${tr("Eslatish")}</button></div></article>`).join('') || `<div class="empty">${icon('inbox')}<h3>${cfg.enabled ? tr("Javobsiz suhbatlar yo‘q") : tr("Kuzatuvni yoqing")}</h3><p>${tr("Faqat yoqilgandan keyin bot ko‘rgan suhbatlar hisoblanadi.")}</p></div>`}${d.total > d.chats.length ? `<p class="note">${tr("Tarif bo‘yicha {0} ta suhbat ko‘rsatiladi. Jami: {1}.",{0:d.limits.chats,1:d.total})}</p>` : ''}<p class="hint">${tr("Muhim suhbatlar Pro’da 5 ta, Ultra’da 20 ta. Muhimlar avval ko‘rsatiladi.")}</p></section></div>`;
+}
+
 let billingData = null, billingError = '', billingPending = false, billingOwner = null, billingRequest = 0, billingMonths = 1;
 const demoCatalog = [1, 3, 6, 12].map(months => ({months, discount: {1:0,3:10,6:15,12:20}[months], prices: Object.fromEntries(Object.entries({plus:15,pro:35,ultra:70}).map(([key, price]) => [key, Math.floor((price * months * (100 - {1:0,3:10,6:15,12:20}[months]) + 50) / 100)]))}));
 function billingView() {
@@ -490,7 +569,7 @@ function paymentHistory() {
 function plans() {
   const data = billingView(), catalog = data?.catalog || [], selected = catalog.find(item => item.months === billingMonths) || catalog[0];
   const controls = `<section class="card billing-summary"><div class="card-head"><h2>${tr("Obuna va to‘lovlar")}</h2><div class="button-group">${button(tr("Yangilash"), 'billing-refresh', 'reply', 'small')}${button(tr("Xaridlar tarixi"), 'billing-history', 'clock', 'small')}</div></div>${billingError && mode === 'live' ? `<p role="alert" class="note">${e(billingError)}</p>` : ''}${mode === 'live' && !data && !billingError ? `<p role="status">${tr("To‘lov ma’lumotlari yuklanmoqda…")}</p>` : data ? `<p>${tr("Joriy tarif")}: <strong>${e(String(data.plan).toUpperCase())}</strong> · ${data.plan === 'free' ? tr("Bepul") : data.expires_at == null ? tr("Muddatsiz") : e(tr("Amal qilish muddati: {0}", {0:billingDate(data.expires_at)}))}</p>${data.effective_plan !== data.plan ? `<p class="hint">${tr("Amaldagi ruxsatlar")}: ${e(String(data.effective_plan).toUpperCase())}</p>` : ''}` : ''}<div class="button-group billing-durations" role="group" aria-label="${tr("Obuna muddati")}">${catalog.map(item => `<button type="button" class="button small ${item.months === billingMonths ? 'primary' : ''}" data-action="billing-duration" data-months="${item.months}" aria-pressed="${item.months === billingMonths}">${tr("{0} oy", {0:item.months})}${item.discount ? ` · −${item.discount}%` : ''}</button>`).join('')}</div><p class="hint">${tr("Bir martalik to‘lov. Avtomatik yechib olish yo‘q. Yakuniy summa va tarif almashinuvi botda tasdiqlanadi.")}</p></section>`;
-  return head(tr("Sizga mos tarif"), tr("Kichik qadamdan katta imkoniyatlargacha.")) + controls + `<div class="plans-grid">${[['free', 'Free', [tr("Oddiy avtojavob va uyqu rejimi"), tr("1 ta haftalik jadval"), tr("Bugungi statistika"), tr("Standart ism soati")]], ['plus', 'Plus', [tr("15 ta Smart FAQ"), tr("2 ta avtomatlashtirish qoidasi"), tr("3 ta haftalik jadval"), tr("Shaxsiy javob matnlari"), tr("7 kunlik statistika"), tr("Reklamasiz foydalanish")]], ['pro', 'Pro', [tr("30 ta Smart FAQ"), tr("10 ta avtomatlashtirish qoidasi"), tr("10 ta haftalik jadval"), tr("30 kunlik statistika"), tr("BIO hisoblagich"), tr("Qo‘shimcha vaqt zonalari")]], ['ultra', 'Ultra', [tr("65 ta Smart FAQ"), tr("30 ta avtomatlashtirish qoidasi"), tr("30 ta haftalik jadval"), tr("Kuniga 50 ta AI javob"), tr("55 ta bilimlar yozuvi"), tr("Barcha statistika grafiklari"), tr("Qo‘shimcha soat shriftlari")]]].map(([key, title, features]) => `<section class="card plan-card ${key === 'ultra' ? 'recommended' : ''}"><div class="card-head"><h2>${title}</h2>${state.plan === key ? `<span class="badge">${tr("Joriy tarif")}</span>` : ''}</div><div class="price">${key === 'free' ? '0' : selected ? num(selected.prices[key]) : '—'}<small> XTR</small></div><span class="subtitle">${tr("{0} oy", {0:billingMonths})}</span><ul>${features.map(f => `<li>${f}</li>`).join('')}</ul><a class="button ${key === 'ultra' ? 'primary' : ''}" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botda ko‘rish ↗")}</a></section>`).join('')}</div><p class="note" style="margin-top:22px">${tr("To‘lov Telegram Stars orqali botda amalga oshiriladi. Bot → Tariflar bo‘limida tarif va muddatni tanlang. Faqat tasdiqlangan to‘lovdan keyin obuna faollashadi.")}</p>`;
+  return head(tr("Sizga mos tarif"), tr("Kichik qadamdan katta imkoniyatlargacha.")) + controls + `<div class="plans-grid">${[['free', 'Free', [tr("Smart Inbox: 3 ta suhbat, xulosa 20:00"), tr("Oddiy avtojavob va uyqu rejimi"), tr("1 ta haftalik jadval"), tr("Bugungi statistika"), tr("Standart ism soati")]], ['plus', 'Plus', [tr("Smart Inbox: 20 ta suhbat, xulosa vaqti tanlanadi"), tr("15 ta Smart FAQ"), tr("2 ta avtomatlashtirish qoidasi"), tr("3 ta haftalik jadval"), tr("Shaxsiy javob matnlari"), tr("7 kunlik statistika"), tr("Reklamasiz foydalanish")]], ['pro', 'Pro', [tr("Smart Inbox: 20 ta suhbat, 5 ta muhim, kuniga 3 ta eslatma"), tr("30 ta Smart FAQ"), tr("10 ta avtomatlashtirish qoidasi"), tr("10 ta haftalik jadval"), tr("30 kunlik statistika"), tr("BIO hisoblagich"), tr("Qo‘shimcha vaqt zonalari")]], ['ultra', 'Ultra', [tr("Smart Inbox: 20 ta suhbat, 20 ta muhim, kuniga 10 ta eslatma"), tr("65 ta Smart FAQ"), tr("30 ta avtomatlashtirish qoidasi"), tr("30 ta haftalik jadval"), tr("Kuniga 50 ta AI javob"), tr("55 ta bilimlar yozuvi"), tr("Barcha statistika grafiklari"), tr("Qo‘shimcha soat shriftlari")]]].map(([key, title, features]) => `<section class="card plan-card ${key === 'ultra' ? 'recommended' : ''}"><div class="card-head"><h2>${title}</h2>${state.plan === key ? `<span class="badge">${tr("Joriy tarif")}</span>` : ''}</div><div class="price">${key === 'free' ? '0' : selected ? num(selected.prices[key]) : '—'}<small> XTR</small></div><span class="subtitle">${tr("{0} oy", {0:billingMonths})}</span><ul>${features.map(f => `<li>${f}</li>`).join('')}</ul><a class="button ${key === 'ultra' ? 'primary' : ''}" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${tr("Botda ko‘rish ↗")}</a></section>`).join('')}</div><p class="note" style="margin-top:22px">${tr("To‘lov Telegram Stars orqali botda amalga oshiriladi. Bot → Tariflar bo‘limida tarif va muddatni tanlang. Faqat tasdiqlangan to‘lovdan keyin obuna faollashadi.")}</p>`;
 }
 function settings() {
   return head(tr("Sozlamalar"), tr("Hisobingiz va Web App ulanishini boshqaring.")) + `<div class="form-grid"><div class="form-stack"><section class="card"><h2>Telegram Business</h2>${featureRow('shield', tr("Hisob holati"), mode === 'live' ? state.connection?.is_enabled ? tr("Telegram Business ulangan") : tr("Business hisobini botga ulang") : tr("Hozir namoyish hisobi ochilgan"), `<span class="badge ${mode === 'live' ? '' : 'gray'}">${mode === 'live' ? tr("Haqiqiy hisob") : tr("Demo")}</span>`)}<p class="hint">${tr("Telegram → Sozlamalar → Telegram Business → Chatbotlar → @autoreplyer_dbot. Xabarlarga javob berish ruxsatini bering.")}</p><a class="button" href="https://t.me/autoreplyer_dbot" target="_blank" rel="noopener">${icon('external')}${tr("Botni ochish")}</a></section><form class="card" id="connection-form"><h2>${tr("Web App ulanishi")}</h2><label class="field"><span>${tr("API server manzili")}</span><input type="url" name="api" value="${e(apiBase)}" placeholder="https://api.example.com"><small>${tr("Alohida API serveringiz manzili. Web App va API bir serverda bo‘lsa, bo‘sh qoldiring. Bot tokenini bu yerga kiritmang.")}</small></label><p class="note">${tr("Haqiqiy hisobga kirish uchun ilovani Telegram bot menyusidan oching. Telegram tasdiqlagan ma’lumot serverda tekshiriladi.")}</p><div class="save-row"><button class="button primary" type="submit">${icon('shield')}${tr("Ulanishni tekshirish")}</button></div></form></div><div class="form-stack"><section class="card"><h2>${tr("Ko‘rinish")}</h2>${featureRow('moon', tr("Tungi rang mavzusi"), tr("Qurilmada saqlanadi."), button(tr("Almashtirish"), 'theme', 'moon', 'small'))}${featureRow('globe', tr("Interfeys tili"), tr("Tanlov shu qurilmada saqlanadi."), languageSelector("settings-language"))}</section><section class="card"><h2>${tr("Ma’lumotlar")}</h2><p class="hint">${mode === 'demo' ? tr("Demo sozlamalari faqat shu brauzerda saqlanadi. Ular haqiqiy botingizga ta’sir qilmaydi.") : tr("Sozlamalar Telegram hisobingiz bilan bog‘langan umumiy bot bazasiga saqlanadi.")}</p>${mode === 'demo' ? button(tr("Demo ma’lumotlarini tiklash"), 'reset-demo', 'reply') : `<span class="badge">${tr("Telegram orqali tasdiqlangan")}</span>`}</section></div></div>`;
@@ -542,6 +621,7 @@ function render() {
     faq: () => entries('faq'),
     knowledge: () => entries('knowledge'),
     automation,
+    inbox: inboxPage,
     scheduler,
     analytics,
     profile,
@@ -558,6 +638,12 @@ function render() {
   const search = document.querySelector('#entry-search');
   if (search && searchValue) { search.value = searchValue; filterEntries(searchValue); }
   restorePendingChanges();
+  if (page === 'inbox') {
+    for (const control of document.querySelectorAll('#main button, #inbox-time')) if (inboxBusy || inboxPending) control.disabled = true;
+    const refresh = document.querySelector('[data-action=inbox-refresh]');
+    if (refresh) { refresh.disabled = inboxBusy || inboxPending || mode !== 'live'; refresh.setAttribute('aria-busy', String(inboxPending)); }
+    if (mode === 'live' && inboxOwner !== state) queueMicrotask(refreshInbox);
+  }
   if (page === 'plans') {
     const refresh = document.querySelector('[data-action=billing-refresh]');
     if (refresh) { refresh.disabled = billingPending || mode !== 'live'; refresh.setAttribute('aria-busy', String(billingPending)); }
@@ -627,6 +713,33 @@ document.addEventListener('click', async event => {
   const action = el.dataset.action;
   let busy = false;
   try {
+    if (action?.startsWith('inbox-')) {
+      if (inboxBusy || inboxPending) return;
+      const d = inboxView(), chat = Number(el.dataset.chat);
+      if (action === 'inbox-refresh') { await refreshInbox(); return; }
+      if (!d) return;
+      if (action === 'inbox-disable') {
+        inboxDialogOwner = state;
+        modal(`${modalHead(tr("Smart Inbox’ni o‘chirish?"))}<p class="note">${tr("Kuzatilgan suhbatlar, muhim belgilar va barcha eslatmalar o‘chiriladi. Bu amalni ortga qaytarib bo‘lmaydi.")}</p><div class="save-row">${button(tr("Bekor qilish"),'close-modal','close')}${button(tr("O‘chirish"),'inbox-confirm-disable','trash','danger')}</div>`);
+      } else if (action === 'inbox-confirm-disable') {
+        if (inboxDialogOwner !== state) return;
+        await closeDialog(document.querySelector('#modal'));
+        await writeInbox('/api/inbox/settings','PATCH',{enabled:false,confirm_clear:true});
+      } else if (action === 'inbox-enable') await writeInbox('/api/inbox/settings','PATCH',{enabled:true});
+      else if (action === 'inbox-notify') await writeInbox('/api/inbox/settings','PATCH',{notify:!d.settings.notify});
+      else if (action === 'inbox-priority') await writeInbox(`/api/inbox/chats/${chat}/priority`,'POST',{is_priority:el.dataset.priority === 'true'});
+      else if (action === 'inbox-cancel') await writeInbox(`/api/inbox/chats/${chat}/reminder`,'DELETE');
+      else if (action === 'inbox-remind') {
+        inboxDialogOwner = state;
+        modal(`${modalHead(tr("Eslatish"))}<p class="hint">${tr("Mavjud eslatma yangi vaqt bilan almashtiriladi.")}</p><div class="inbox-choices">${[['1h',tr("1 soatdan keyin")],['3h',tr("3 soatdan keyin")],['6h',tr("6 soatdan keyin")],['next9',tr("Ertaga 09:00")]].map(([choice,label])=>`<button type="button" class="button" data-action="inbox-schedule" data-chat="${chat}" data-choice="${choice}">${icon('clock')}${label}</button>`).join('')}</div><p class="note">${e(d.timezone)}</p>`);
+      } else if (action === 'inbox-schedule') {
+        if (inboxDialogOwner !== state) return;
+        const choice = el.dataset.choice;
+        await closeDialog(document.querySelector('#modal'));
+        await writeInbox(`/api/inbox/chats/${chat}/reminder`,'POST',{choice});
+      }
+      return;
+    }
     if (action === 'billing-duration') {
       const months = Number(el.dataset.months);
       if ([1,3,6,12].includes(months)) { billingMonths = months; render(); document.querySelector(`[data-action=billing-duration][data-months="${months}"]`)?.focus({preventScroll:true}); }
@@ -771,6 +884,10 @@ async function changeLanguage(value) {
 }
 document.addEventListener('change', async event => {
   const el = event.target;
+  if (el.id === 'inbox-time') {
+    if (!inboxBusy && !inboxPending) await writeInbox('/api/inbox/settings','PATCH',{digest_minutes:Number(el.value)});
+    return;
+  }
   if (!el.dataset.setting && !el.dataset.toggle) return;
   if (!['demo', 'live'].includes(mode)) return;
   const key = changeKey(el);

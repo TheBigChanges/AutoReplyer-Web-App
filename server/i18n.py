@@ -8,6 +8,13 @@ def language_code(value: str | None) -> str:
 
 
 MESSAGES = {
+    'Smart Inbox bazasi hali tayyor emas. Botning yangi versiyasini ishga tushiring.': ('База Smart Inbox ещё не готова. Запустите новую версию бота.', 'The Smart Inbox database is not ready. Start the updated bot first.'),
+    'Avval Smart Inbox’ni yoqing.': ('Сначала включите Smart Inbox.', 'Enable Smart Inbox first.'),
+    'Suhbat topilmadi yoki allaqachon javob berilgan.': ('Чат не найден или вы уже ответили.', 'Chat not found or already answered.'),
+    'Smart Inbox tarif limiti to‘lgan.': ('Достигнут лимит Smart Inbox вашего тарифа.', 'Your plan’s Smart Inbox limit has been reached.'),
+    'Eslatma yuborilmoqda. Bir oz kutib qayta urinib ko‘ring.': ('Напоминание отправляется. Повторите попытку позже.', 'The reminder is being sent. Try again shortly.'),
+    'Eslatma topilmadi yoki yuborilmoqda. Ro‘yxatni yangilang.': ('Напоминание не найдено или отправляется. Обновите список.', 'The reminder was not found or is being sent. Refresh the list.'),
+
     'To‘lov ma’lumotlari hali tayyor emas. Botning yangi versiyasini ishga tushiring.': ('Данные платежей ещё не готовы. Запустите новую версию бота.', 'Payment data is not ready. Start the updated bot first.'),
     'Qoida shartlarini tekshiring.': ('Проверьте условия правила.', 'Check the rule conditions.'),
     'Kun va vaqt shartlari faqat Pro va Ultra tariflarida mavjud.': ('Условия по дням и времени доступны только на Pro и Ultra.', 'Day and time conditions require Pro or Ultra.'),

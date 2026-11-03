@@ -5,11 +5,11 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 BASE = os.environ.get('AR_BASE_URL', 'http://127.0.0.1:8765')
-ROUTES = ['dashboard', 'replies', 'ai', 'faq', 'knowledge', 'scheduler', 'analytics', 'sleep', 'profile', 'plans', 'settings', 'help']
+ROUTES = ['dashboard', 'replies', 'ai', 'faq', 'knowledge', 'inbox', 'scheduler', 'analytics', 'sleep', 'profile', 'plans', 'settings', 'help']
 LABELS = {
-    'uz': ['Salom', 'Avtojavob', 'AI yordamchi', 'Smart FAQ', 'Bilimlar bazasi', 'Smart jadval', 'Statistika', 'Uyqu rejimi', 'Profil vositalari', 'Sizga mos tarif', 'Sozlamalar', 'Boshlash oson'],
-    'ru': ['Здравствуйте', 'Автоответ', 'ИИ-помощник', 'Smart FAQ', 'База знаний', 'Умное расписание', 'Статистика', 'Режим сна', 'Инструменты профиля', 'Тариф для вас', 'Настройки', 'Начать просто'],
-    'en': ['Hello', 'Auto-reply', 'AI assistant', 'Smart FAQ', 'Knowledge base', 'Smart scheduler', 'Analytics', 'Sleep mode', 'Profile tools', 'Your ideal plan', 'Settings', 'Getting started is easy'],
+    'uz': ['Salom', 'Avtojavob', 'AI yordamchi', 'Smart FAQ', 'Bilimlar bazasi', 'Smart Inbox', 'Smart jadval', 'Statistika', 'Uyqu rejimi', 'Profil vositalari', 'Sizga mos tarif', 'Sozlamalar', 'Boshlash oson'],
+    'ru': ['Здравствуйте', 'Автоответ', 'ИИ-помощник', 'Smart FAQ', 'База знаний', 'Smart Inbox', 'Умное расписание', 'Статистика', 'Режим сна', 'Инструменты профиля', 'Тариф для вас', 'Настройки', 'Начать просто'],
+    'en': ['Hello', 'Auto-reply', 'AI assistant', 'Smart FAQ', 'Knowledge base', 'Smart Inbox', 'Smart scheduler', 'Analytics', 'Sleep mode', 'Profile tools', 'Your ideal plan', 'Settings', 'Getting started is easy'],
 }
 STUB = 'window.Telegram={WebApp:{initData:"",ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){}}};'
 def choose_language(page, language, owner='header-language'):
@@ -116,4 +116,4 @@ with sync_playwright() as p:
     assert live.get_by_role('heading', name='Не удалось подключиться к API').count() == 1
     assert not errors, errors
     browser.close()
-    print(json.dumps({'languages': ['uz', 'ru', 'en'], 'routes': 12, 'widths': [1440, 768, 390, 320], 'checks': ['draft preservation', 'language persistence', 'bot-language default', 'no unintended bot writes', 'localized Free restriction', 'localized session error'], 'page_errors': errors}))
+    print(json.dumps({'languages': ['uz', 'ru', 'en'], 'routes': len(ROUTES), 'widths': [1440, 768, 390, 320], 'checks': ['draft preservation', 'language persistence', 'bot-language default', 'no unintended bot writes', 'localized Free restriction', 'localized session error'], 'page_errors': errors}))
